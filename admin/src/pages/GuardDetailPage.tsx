@@ -168,6 +168,14 @@ export default function GuardDetailPage() {
                         p.status === 'approved' ? 'bg-blue-100 text-blue-800' :
                         'bg-gray-100 text-gray-600'
                       }`}>{p.status}</span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Danger Zone */}
       <div className="bg-red-50 border border-red-200 rounded-xl p-6">
