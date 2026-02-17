@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = (import.meta.env.VITE_API_URL as string) || '/api';
 
 function getToken(): string | null {
   return localStorage.getItem('bb_guard_token');
