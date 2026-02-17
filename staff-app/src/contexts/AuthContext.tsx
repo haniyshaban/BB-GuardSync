@@ -6,6 +6,10 @@ interface Staff {
   name: string;
   email: string;
   role: string;
+  site_id?: number;
+  site_name?: string;
+  tokenStale?: boolean;
+  message?: string;
 }
 
 interface AuthCtx {

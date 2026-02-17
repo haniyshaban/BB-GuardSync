@@ -134,6 +134,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS staff (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     org_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
+    site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL,

@@ -116,19 +116,21 @@ console.log(`✓ Created ${guardCount} guards (password: guard123)`);
 
 // ============ STAFF / ADMIN ============
 const staffMembers = [
-  { name: 'Admin User', email: 'admin@blackbelt.app', password: 'admin123', role: 'admin', phone: '9200000001' },
-  { name: 'Field Officer', email: 'staff@blackbelt.app', password: 'staff123', role: 'staff', phone: '9200000002' },
+  { name: 'Admin User', email: 'admin@blackbelt.app', password: 'admin123', role: 'admin', phone: '9200000001', siteId: null },
+  { name: 'Whitefield Site Manager', email: 'staff.whitefield@blackbelt.app', password: 'staff123', role: 'staff', phone: '9200000002', siteId: siteIds[0] },
+  { name: 'Koramangala Site Manager', email: 'staff.koramangala@blackbelt.app', password: 'staff123', role: 'staff', phone: '9200000003', siteId: siteIds[1] },
+  { name: 'Electronic City Site Manager', email: 'staff.ecity@blackbelt.app', password: 'staff123', role: 'staff', phone: '9200000004', siteId: siteIds[2] },
 ];
 
 const insertStaff = db.prepare(
-  'INSERT OR IGNORE INTO staff (name, email, password, phone, role) VALUES (?, ?, ?, ?, ?)'
+  'INSERT OR IGNORE INTO staff (name, email, password, phone, role, site_id) VALUES (?, ?, ?, ?, ?, ?)'
 );
 
 let staffCount = 0;
 for (const s of staffMembers) {
   const existing = db.prepare('SELECT id FROM staff WHERE email = ?').get(s.email);
   if (!existing) {
-    insertStaff.run(s.name, s.email, hash(s.password), s.phone, s.role);
+    insertStaff.run(s.name, s.email, hash(s.password), s.phone, s.role, s.siteId);
     staffCount++;
   }
 }
@@ -171,5 +173,7 @@ console.log(`✓ Created ${attendanceCount} attendance records (last 14 days)`);
 
 console.log('\n⬛ Seed complete!');
 console.log('  Admin login: admin@blackbelt.app / admin123');
-console.log('  Staff login: staff@blackbelt.app / staff123');
+console.log('  Staff login (Whitefield): staff.whitefield@blackbelt.app / staff123');
+console.log('  Staff login (Koramangala): staff.koramangala@blackbelt.app / staff123');
+console.log('  Staff login (Electronic City): staff.ecity@blackbelt.app / staff123');
 console.log('  Guard login: any guard phone or email / guard123\n');

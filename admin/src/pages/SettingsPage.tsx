@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/utils';
 import { useState, useEffect } from 'react';
-import { Settings, Save } from 'lucide-react';
+import { Settings, Save, AlertCircle } from 'lucide-react';
 
 export default function SettingsPage() {
   const qc = useQueryClient();
@@ -19,24 +19,46 @@ export default function SettingsPage() {
     idleDistanceMeters: 50,
   });
 
+  const [originalForm, setOriginalForm] = useState(form);
+  const [showConfirm, setShowConfirm] = useState(false);
+
   useEffect(() => {
     if (configRes?.data) {
       const c = configRes.data;
-      setForm({
+      const newForm = {
         locationUpdateIntervalMins: c.location_update_interval_mins,
         faceChecksPerDayMin: c.face_checks_per_day_min,
         faceChecksPerDayMax: c.face_checks_per_day_max,
         dataRetentionDays: c.data_retention_days,
         idleThresholdMins: c.idle_threshold_mins,
         idleDistanceMeters: c.idle_distance_meters,
-      });
+      };
+      setForm(newForm);
+      setOriginalForm(newForm);
     }
   }, [configRes]);
 
+  const hasChanges = JSON.stringify(form) !== JSON.stringify(originalForm);
+  const isGpsIntervalValid = form.locationUpdateIntervalMins >= 10;
+
   const saveMut = useMutation({
     mutationFn: () => api('/config', { method: 'PUT', body: JSON.stringify(form) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['config'] }); alert('Settings saved!'); },
+    onSuccess: () => { 
+      qc.invalidateQueries({ queryKey: ['config'] }); 
+      setShowConfirm(false);
+      alert('Settings saved successfully!'); 
+    },
   });
+
+  const handleSaveClick = () => {
+    if (hasChanges) {
+      setShowConfirm(true);
+    }
+  };
+
+  const handleConfirmSave = () => {
+    saveMut.mutate();
+  };
 
   if (isLoading) return <p className="text-gray-500 py-8">Loading settings...</p>;
 
@@ -57,8 +79,14 @@ export default function SettingsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">GPS Update Interval (minutes)</label>
               <input type="number" value={form.locationUpdateIntervalMins}
                 onChange={(e) => setForm({ ...form, locationUpdateIntervalMins: Number(e.target.value) })}
-                className="w-full px-3 py-2 border rounded-lg" min={5} max={120} />
-              <p className="text-xs text-gray-400 mt-1">How often guards send GPS location during shift</p>
+                className={`w-full px-3 py-2 border rounded-lg ${!isGpsIntervalValid ? 'border-red-500 focus:ring-red-500' : ''}`}
+                min={10} max={120} />
+              {!isGpsIntervalValid && (
+                <p className="text-xs text-red-600 mt-1 font-medium">⚠️ Minimum 10 minutes required to avoid excessive data usage</p>
+              )}
+              {isGpsIntervalValid && (
+                <p className="text-xs text-gray-400 mt-1">How often guards send GPS location during shift</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Data Retention (days)</label>
@@ -113,11 +141,44 @@ export default function SettingsPage() {
           <p className="text-xs text-gray-400 mt-2">Random face verification checks are scheduled between these min/max values each day when a guard clocks in</p>
         </div>
 
-        <button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}
-          className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">
+        <button onClick={handleSaveClick} disabled={!hasChanges || !isGpsIntervalValid || saveMut.isPending}
+          className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity">
           <Save className="w-4 h-4" /> {saveMut.isPending ? 'Saving...' : 'Save Settings'}
         </button>
       </div>
+
+      {/* Confirmation Dialog */}
+      {showConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-yellow-100 rounded-lg">
+                <AlertCircle className="w-6 h-6 text-yellow-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">Confirm Settings Update</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Are you sure you want to save these settings? This will affect all guards and tracking behavior across the system.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button 
+                onClick={() => setShowConfirm(false)}
+                disabled={saveMut.isPending}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+                Cancel
+              </button>
+              <button 
+                onClick={handleConfirmSave}
+                disabled={saveMut.isPending}
+                className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">
+                {saveMut.isPending ? 'Saving...' : 'Confirm Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

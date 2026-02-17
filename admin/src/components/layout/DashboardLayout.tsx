@@ -23,7 +23,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <button onClick={() => setSidebarOpen(true)} className="p-2 hover:bg-gray-100 rounded-lg">
             <Menu className="w-5 h-5" />
           </button>
-          <span className="ml-3 font-semibold text-gray-900">⬛ Black Belt</span>
+          <img src="/logo.png" alt="Black Belt Logo" className="ml-3 w-8 h-8" />
+          <span className="ml-2 font-semibold text-gray-900">Black Belt</span>
         </header>
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
       </div>

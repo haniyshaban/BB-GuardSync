@@ -98,6 +98,12 @@ router.get('/', authMiddleware, (req, res) => {
                LEFT JOIN sites s ON a.site_id = s.id WHERE 1=1`;
     const params = [];
 
+    // Staff can only see attendance from their assigned site
+    if (req.user.role === 'staff' && req.user.siteId) {
+      sql += ' AND a.site_id = ?';
+      params.push(req.user.siteId);
+    }
+
     if (guardId) { sql += ' AND a.guard_id = ?'; params.push(guardId); }
     if (siteId) { sql += ' AND a.site_id = ?'; params.push(siteId); }
     if (date) { sql += ' AND a.date = ?'; params.push(date); }
@@ -137,6 +143,12 @@ router.get('/export', authMiddleware, requireRole('admin', 'staff'), (req, res) 
                LEFT JOIN guards g ON a.guard_id = g.id 
                LEFT JOIN sites s ON a.site_id = s.id WHERE 1=1`;
     const params = [];
+
+    // Staff can only export attendance from their assigned site
+    if (req.user.role === 'staff' && req.user.siteId) {
+      sql += ' AND a.site_id = ?';
+      params.push(req.user.siteId);
+    }
 
     if (guardId) { sql += ' AND a.guard_id = ?'; params.push(guardId); }
     if (siteId) { sql += ' AND a.site_id = ?'; params.push(siteId); }

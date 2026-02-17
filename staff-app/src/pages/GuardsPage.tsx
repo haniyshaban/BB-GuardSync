@@ -64,11 +64,11 @@ export default function GuardsPage() {
                 <p className="text-xs text-gray-500 truncate">{g.site_name || 'No site assigned'}</p>
                 <p className="text-xs text-gray-400">{g.phone}</p>
               </div>
-              <div className="text-right text-xs text-gray-400">
-                {g.is_clocked_in ? (
-                  <span className="text-green-600 font-medium">On Duty</span>
+              <div className="text-right text-xs">
+                {g.site_id ? (
+                  <span className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded-full">Assigned</span>
                 ) : (
-                  <span>Off Duty</span>
+                  <span className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-full">Unassigned</span>
                 )}
               </div>
             </div>

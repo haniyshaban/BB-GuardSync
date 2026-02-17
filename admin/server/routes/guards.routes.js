@@ -61,6 +61,12 @@ router.get('/', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
                LEFT JOIN site_shifts sh ON g.shift_id = sh.id WHERE 1=1`;
     const params = [];
 
+    // Staff can only see guards from their assigned site
+    if (req.user.role === 'staff' && req.user.siteId) {
+      sql += ' AND g.site_id = ?';
+      params.push(req.user.siteId);
+    }
+
     if (approvalStatus) {
       sql += ' AND g.approval_status = ?';
       params.push(approvalStatus);

@@ -9,6 +9,7 @@ export default function ManageSitePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [showAddGuard, setShowAddGuard] = useState(false);
+  const [showAddStaff, setShowAddStaff] = useState(false);
   const [showDeleteSite, setShowDeleteSite] = useState(false);
 
   const { data: siteRes, isLoading } = useQuery({
@@ -21,10 +22,21 @@ export default function ManageSitePage() {
     queryFn: () => api(`/guards?siteId=${id}`),
   });
 
+  const { data: staffRes } = useQuery({
+    queryKey: ['site-staff', id],
+    queryFn: () => api(`/staff?siteId=${id}`),
+  });
+
   const { data: allGuardsRes } = useQuery({
     queryKey: ['guards-unassigned'],
     queryFn: () => api('/guards?status=active'),
     enabled: showAddGuard,
+  });
+
+  const { data: allStaffRes } = useQuery({
+    queryKey: ['staff-all'],
+    queryFn: () => api('/staff'),
+    enabled: showAddStaff,
   });
 
   const removeGuardMut = useMutation({
@@ -35,6 +47,17 @@ export default function ManageSitePage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['site-guards', id] });
       qc.invalidateQueries({ queryKey: ['guards'] });
+    },
+  });
+
+  const removeStaffMut = useMutation({
+    mutationFn: (staffId: number) => api(`/staff/${staffId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ site_id: null }),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['site-staff', id] });
+      qc.invalidateQueries({ queryKey: ['staff'] });
     },
   });
 
@@ -50,6 +73,7 @@ export default function ManageSitePage() {
 
   const site = siteRes?.data;
   const guards = guardsRes?.data || [];
+  const staff = staffRes?.data || [];
 
   if (!site) return <div className="text-center py-12"><p>Site not found</p></div>;
 
@@ -98,6 +122,45 @@ export default function ManageSitePage() {
           </div>
         ) : (
           <p className="text-sm text-gray-500">No shifts defined</p>
+        )}
+      </div>
+
+      {/* Ground Staff */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold">Ground Staff ({staff.length})</h2>
+          <button
+            onClick={() => setShowAddStaff(true)}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800"
+          >
+            <Plus className="w-4 h-4" /> Assign Staff
+          </button>
+        </div>
+
+        {staff.length > 0 ? (
+          <div className="space-y-2">
+            {staff.map((member: any) => (
+              <div key={member.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                <div className="flex-1">
+                  <p className="font-medium">{member.name}</p>
+                  <p className="text-sm text-gray-500">{member.email} • {member.phone || 'No phone'}</p>
+                  <span className="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">{member.role}</span>
+                </div>
+                <button
+                  onClick={() => {
+                    if (confirm(`Remove ${member.name} from this site?`)) {
+                      removeStaffMut.mutate(member.id);
+                    }
+                  }}
+                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500 text-center py-4">No ground staff assigned to this site</p>
         )}
       </div>
 
@@ -170,6 +233,22 @@ export default function ManageSitePage() {
             qc.invalidateQueries({ queryKey: ['site-guards', id] });
             qc.invalidateQueries({ queryKey: ['guards'] });
             setShowAddGuard(false);
+          }}
+        />
+      )}
+
+      {/* Add Staff Modal */}
+      {showAddStaff && (
+        <AddStaffToSiteDialog
+          siteId={Number(id)}
+          siteName={site.name}
+          existingStaff={staff}
+          allStaff={allStaffRes?.data || []}
+          onClose={() => setShowAddStaff(false)}
+          onSuccess={() => {
+            qc.invalidateQueries({ queryKey: ['site-staff', id] });
+            qc.invalidateQueries({ queryKey: ['staff'] });
+            setShowAddStaff(false);
           }}
         />
       )}
@@ -353,6 +432,96 @@ function DeleteSiteDialog({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AddStaffToSiteDialog({
+  siteId,
+  siteName,
+  existingStaff,
+  allStaff,
+  onClose,
+  onSuccess,
+}: {
+  siteId: number;
+  siteName: string;
+  existingStaff: any[];
+  allStaff: any[];
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [selectedStaffId, setSelectedStaffId] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const existingStaffIds = new Set(existingStaff.map(s => s.id));
+  const availableStaff = allStaff.filter(s => !existingStaffIds.has(s.id) && s.role === 'staff');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStaffId) return;
+
+    setLoading(true);
+    try {
+      await api(`/staff/${selectedStaffId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ site_id: siteId }),
+      });
+      onSuccess();
+    } catch (err) {
+      alert('Failed to assign staff to site');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <h2 className="text-lg font-semibold mb-4">Assign Staff to {siteName}</h2>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Select Staff Member *</label>
+            <select
+              value={selectedStaffId}
+              onChange={(e) => setSelectedStaffId(e.target.value)}
+              required
+              className="w-full px-3 py-2 border rounded-lg"
+            >
+              <option value="">Choose a staff member...</option>
+              {availableStaff.map((member: any) => (
+                <option key={member.id} value={member.id}>
+                  {member.name} ({member.email}) {member.site_name ? `- Currently at ${member.site_name}` : '- Unassigned'}
+                </option>
+              ))}
+            </select>
+            {availableStaff.length === 0 && (
+              <p className="text-xs text-gray-500 mt-1">No available staff members to assign</p>
+            )}
+          </div>
+          <p className="text-xs text-gray-500">
+            Note: If a staff member is currently assigned to another site, they will be reassigned to this site.
+          </p>
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={loading || !availableStaff.length}
+            className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+          >
+            {loading ? 'Assigning...' : 'Assign Staff'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
