@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: ./admin/server
+      dockerfile: Dockerfile
+    ports:
+      - '5000:5000'
+    environment:
+      - PORT=5000
+      - JWT_SECRET=${JWT_SECRET:-blackbelt-guardsync-secret}
+      - NODE_ENV=production
+    volumes:
+      - server-data:/app/data
+    restart: unless-stopped
+
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+    ports:
+      - '5173:80'
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  guard-app:
+    build:
+      context: ./guard-app
+      dockerfile: Dockerfile
+    ports:
+      - '5174:80'
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  staff-app:
+    build:
+      context: ./staff-app
+      dockerfile: Dockerfile
+    ports:
+      - '5175:80'
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  server-data:

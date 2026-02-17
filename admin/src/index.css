@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Status badges */
+.status-online { @apply bg-green-100 text-green-800; }
+.status-offline { @apply bg-gray-100 text-gray-600; }
+.status-idle { @apply bg-amber-100 text-amber-800; }
+.status-pending { @apply bg-blue-100 text-blue-800; }

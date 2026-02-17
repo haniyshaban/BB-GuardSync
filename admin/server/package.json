@@ -1,0 +1,22 @@
+{
+  "name": "blackbelt-guardsync-api",
+  "version": "1.0.0",
+  "description": "Black Belt - GuardSync API Server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "seed": "node seed.js",
+    "archive-locations": "node jobs/archive-locations.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "express-rate-limit": "^7.4.0"
+  }
+}

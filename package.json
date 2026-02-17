@@ -1,0 +1,12 @@
+{
+  "name": "blackbelt-guardsync",
+  "private": true,
+  "scripts": {
+    "dev:server": "cd admin/server && node index.js",
+    "dev:admin": "cd admin && npx vite",
+    "dev:guard": "cd guard-app && npx vite",
+    "dev:staff": "cd staff-app && npx vite",
+    "seed": "cd admin/server && node seed.js",
+    "install:all": "cd admin && npm install && cd ../admin/server && npm install && cd ../../guard-app && npm install && cd ../staff-app && npm install"
+  }
+}
