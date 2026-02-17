@@ -71,6 +71,31 @@ router.get('/me', authMiddleware, (req, res) => {
   }
 });
 
+// PUT /api/staff/change-password
+router.put('/change-password', authMiddleware, (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, error: 'Current and new password are required' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, error: 'New password must be at least 6 characters' });
+    }
+    const staff = db.prepare('SELECT * FROM staff WHERE id = ?').get(req.user.id);
+    if (!staff) return res.status(404).json({ success: false, error: 'Staff not found' });
+
+    const valid = bcrypt.compareSync(currentPassword, staff.password);
+    if (!valid) return res.status(401).json({ success: false, error: 'Current password is incorrect' });
+
+    const hash = bcrypt.hashSync(newPassword, 10);
+    db.prepare('UPDATE staff SET password = ? WHERE id = ?').run(hash, req.user.id);
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (err) {
+    console.error('Change password error:', err);
+    res.status(500).json({ success: false, error: 'Failed to change password' });
+  }
+});
+
 // GET /api/staff - List staff (admin only)
 router.get('/', authMiddleware, requireRole('admin'), (req, res) => {
   try {

@@ -27,10 +27,25 @@ function seedDefaultAdmin() {
       console.log(`  ✓ Default admin created: ${email}`);
     }
   } catch (err) {
-    console.error('Auto-seed error:', err.message);
+    console.error('Auto-seed admin error:', err.message);
   }
 }
 
+// Auto-seed demo data if DB is empty
+function seedDemoData() {
+  try {
+    const guardCount = db.prepare('SELECT COUNT(*) as count FROM guards').get().count;
+    if (guardCount === 0) {
+      console.log('  ⏳ Empty database detected, seeding demo data...');
+      require('./seed');
+      console.log('  ✓ Demo data seeded');
+    }
+  } catch (err) {
+    console.error('Auto-seed demo error:', err.message);
+  }
+}
+
+seedDemoData();
 seedDefaultAdmin();
 
 const PORT = process.env.PORT || 5000;

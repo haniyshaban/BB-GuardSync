@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/utils';
 import { useState, useEffect } from 'react';
-import { Settings, Save, AlertCircle } from 'lucide-react';
+import { Settings, Save, AlertCircle, KeyRound } from 'lucide-react';
 
 export default function SettingsPage() {
   const qc = useQueryClient();
@@ -21,6 +21,42 @@ export default function SettingsPage() {
 
   const [originalForm, setOriginalForm] = useState(form);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // Change password state
+  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [pwError, setPwError] = useState('');
+  const [pwSuccess, setPwSuccess] = useState('');
+
+  const changePwMut = useMutation({
+    mutationFn: () => api('/staff/change-password', {
+      method: 'PUT',
+      body: JSON.stringify({ currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword }),
+    }),
+    onSuccess: () => {
+      setPwSuccess('Password changed successfully!');
+      setPwError('');
+      setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    },
+    onError: (err: any) => {
+      setPwError(err.message || 'Failed to change password');
+      setPwSuccess('');
+    },
+  });
+
+  const handleChangePw = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwError('');
+    setPwSuccess('');
+    if (pwForm.newPassword !== pwForm.confirmPassword) {
+      setPwError('New passwords do not match');
+      return;
+    }
+    if (pwForm.newPassword.length < 6) {
+      setPwError('New password must be at least 6 characters');
+      return;
+    }
+    changePwMut.mutate();
+  };
 
   useEffect(() => {
     if (configRes?.data) {
@@ -145,6 +181,39 @@ export default function SettingsPage() {
           className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity">
           <Save className="w-4 h-4" /> {saveMut.isPending ? 'Saving...' : 'Save Settings'}
         </button>
+      </div>
+
+      {/* Change Password */}
+      <div className="bg-white rounded-xl border p-6 space-y-4">
+        <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+          <KeyRound className="w-5 h-5" /> Change Password
+        </h2>
+        <form onSubmit={handleChangePw} className="space-y-4 max-w-sm">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+            <input type="password" value={pwForm.currentPassword}
+              onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg" required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+            <input type="password" value={pwForm.newPassword}
+              onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg" required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+            <input type="password" value={pwForm.confirmPassword}
+              onChange={(e) => setPwForm({ ...pwForm, confirmPassword: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg" required />
+          </div>
+          {pwError && <p className="text-sm text-red-600">{pwError}</p>}
+          {pwSuccess && <p className="text-sm text-green-600">{pwSuccess}</p>}
+          <button type="submit" disabled={changePwMut.isPending}
+            className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-opacity">
+            <KeyRound className="w-4 h-4" /> {changePwMut.isPending ? 'Changing...' : 'Change Password'}
+          </button>
+        </form>
       </div>
 
       {/* Confirmation Dialog */}
