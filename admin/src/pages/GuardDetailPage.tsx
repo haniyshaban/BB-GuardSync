@@ -267,14 +267,6 @@ function DeleteGuardDialog({
           </button>
         </div>
       </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }
