@@ -88,13 +88,18 @@ router.get('/', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
 
     // Compute live status for each guard
     const config = db.prepare('SELECT * FROM system_config WHERE id = 1').get();
-    const guardsWithStatus = guards.map(g => {
+    let guardsWithStatus = guards.map(g => {
       const { password: _, ...guard } = g;
       guard.status = computeStatus(g, config);
       return guard;
     });
 
-    res.json({ success: true, data: guardsWithStatus, total, page: parseInt(page), limit: parseInt(limit) });
+    // Filter by computed status if requested
+    if (status) {
+      guardsWithStatus = guardsWithStatus.filter(g => g.status === status);
+    }
+
+    res.json({ success: true, data: guardsWithStatus, total: guardsWithStatus.length, page: parseInt(page), limit: parseInt(limit) });
   } catch (err) {
     console.error('List guards error:', err);
     res.status(500).json({ success: false, error: 'Failed to list guards' });

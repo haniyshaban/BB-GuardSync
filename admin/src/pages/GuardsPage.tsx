@@ -1,22 +1,42 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, statusColor, formatDate } from '@/lib/utils';
 import { Search, UserPlus, CheckCircle, XCircle } from 'lucide-react';
 
 export default function GuardsPage() {
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<string>('all');
   const [authModal, setAuthModal] = useState<any>(null);
   const navigate = useNavigate();
   const qc = useQueryClient();
 
+  // Read initial filter from URL
+  useEffect(() => {
+    const statusParam = searchParams.get('status');
+    if (statusParam) {
+      setFilter(statusParam);
+    }
+  }, [searchParams]);
+
   const { data: guardsRes, isLoading } = useQuery({
     queryKey: ['guards', search, filter],
     queryFn: () => {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
-      if (filter !== 'all') params.set('approvalStatus', filter);
+      
+      // Handle different filter types
+      if (filter !== 'all') {
+        // Online/idle/offline are connection statuses
+        if (['online', 'idle', 'offline'].includes(filter)) {
+          params.set('status', filter);
+        } else {
+          // pending/active/inactive/rejected are approval statuses
+          params.set('approvalStatus', filter);
+        }
+      }
+      
       return api(`/guards?${params}`);
     },
   });
@@ -67,10 +87,17 @@ export default function GuardsPage() {
           className="px-4 py-2 border border-gray-300 rounded-lg bg-white"
         >
           <option value="all">All Statuses</option>
-          <option value="pending">Pending Approval</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="rejected">Rejected</option>
+          <optgroup label="Connection Status">
+            <option value="online">Online</option>
+            <option value="idle">Idle</option>
+            <option value="offline">Offline</option>
+          </optgroup>
+          <optgroup label="Approval Status">
+            <option value="pending">Pending Approval</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="rejected">Rejected</option>
+          </optgroup>
         </select>
       </div>
 
