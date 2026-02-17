@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage';
 import GuardsPage from './pages/GuardsPage';
 import GuardDetailPage from './pages/GuardDetailPage';
 import SitesPage from './pages/SitesPage';
+import ManageSitePage from './pages/ManageSitePage';
 import AttendancePage from './pages/AttendancePage';
 import PayrollPage from './pages/PayrollPage';
 import SettingsPage from './pages/SettingsPage';
@@ -29,6 +30,7 @@ export default function App() {
                 <Route path="/guards" element={<GuardsPage />} />
                 <Route path="/guards/:id" element={<GuardDetailPage />} />
                 <Route path="/sites" element={<SitesPage />} />
+                <Route path="/sites/:id/manage" element={<ManageSitePage />} />
                 <Route path="/attendance" element={<AttendancePage />} />
                 <Route path="/payroll" element={<PayrollPage />} />
                 <Route path="/settings" element={<SettingsPage />} />

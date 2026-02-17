@@ -1,20 +1,17 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/utils';
-import { Plus, Trash2, Building2, Clock } from 'lucide-react';
+import { Plus, Building2, Clock, Settings, Trash2 } from 'lucide-react';
 
 export default function SitesPage() {
   const [showAdd, setShowAdd] = useState(false);
+  const navigate = useNavigate();
   const qc = useQueryClient();
 
   const { data: sitesRes, isLoading } = useQuery({
     queryKey: ['sites'],
     queryFn: () => api('/sites'),
-  });
-
-  const deleteMut = useMutation({
-    mutationFn: (id: number) => api(`/sites/${id}`, { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['sites'] }),
   });
 
   const sites = sitesRes?.data || [];
@@ -41,13 +38,16 @@ export default function SitesPage() {
           sites.map((site: any) => (
             <div key={site.id} className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex justify-between items-start mb-3">
-                <div>
+                <div className="flex-1">
                   <h3 className="font-semibold text-gray-900">{site.name}</h3>
                   <p className="text-sm text-gray-500 mt-1">{site.address || 'No address'}</p>
                 </div>
-                <button onClick={() => { if (confirm('Delete this site?')) deleteMut.mutate(site.id); }}
-                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                  <Trash2 className="w-4 h-4" />
+                <button
+                  onClick={() => navigate(`/sites/${site.id}/manage`)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <Settings className="w-4 h-4" />
+                  Manage
                 </button>
               </div>
 

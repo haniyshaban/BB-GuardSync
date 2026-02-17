@@ -1,13 +1,15 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, statusColor, formatDate, formatDateTime } from '@/lib/utils';
-import { ArrowLeft, Phone, Mail, Building2, Clock, DollarSign } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, Building2, Clock, DollarSign, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 
 export default function GuardDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [tab, setTab] = useState<'attendance' | 'payroll'>('attendance');
+  const [showDeleteGuard, setShowDeleteGuard] = useState(false);
 
   const { data: guardRes, isLoading } = useQuery({
     queryKey: ['guard', id],
@@ -24,6 +26,14 @@ export default function GuardDetailPage() {
     queryKey: ['guard-payroll', id],
     queryFn: () => api(`/payroll?guardId=${id}`),
     enabled: tab === 'payroll',
+  });
+
+  const deleteGuardMut = useMutation({
+    mutationFn: () => api(`/guards/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['guards'] });
+      navigate('/guards');
+    },
   });
 
   if (isLoading) return <div className="flex justify-center py-12"><p className="text-gray-500">Loading...</p></div>;
@@ -158,6 +168,97 @@ export default function GuardDetailPage() {
                         p.status === 'approved' ? 'bg-blue-100 text-blue-800' :
                         'bg-gray-100 text-gray-600'
                       }`}>{p.status}</span>
+
+      {/* Danger Zone */}
+      <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="font-semibold text-red-900 mb-1">Danger Zone</h3>
+            <p className="text-sm text-red-700 mb-4">
+              Deleting this guard will remove all associated attendance records, payroll data, and access credentials. This action cannot be undone.
+            </p>
+            <button
+              onClick={() => setShowDeleteGuard(true)}
+              className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700"
+            >
+              Delete Guard
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Delete Guard Confirmation */}
+      {showDeleteGuard && (
+        <DeleteGuardDialog
+          guardName={guard.name}
+          onClose={() => setShowDeleteGuard(false)}
+          onConfirm={() => deleteGuardMut.mutate()}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeleteGuardDialog({
+  guardName,
+  onClose,
+  onConfirm,
+}: {
+  guardName: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const [confirmText, setConfirmText] = useState('');
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 bg-red-100 rounded-full">
+            <AlertTriangle className="w-6 h-6 text-red-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900">Delete Guard</h2>
+        </div>
+
+        <p className="text-sm text-gray-600 mb-4">
+          This will permanently delete <strong>{guardName}</strong> and all associated data including attendance records and payroll history. This action cannot be undone.
+        </p>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2">
+            Type <strong className="text-red-600">{guardName}</strong> to confirm:
+          </label>
+          <input
+            type="text"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            className="w-full px-3 py-2 border rounded-lg"
+            placeholder="Enter guard name"
+          />
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              if (confirmText === guardName) {
+                onConfirm();
+              }
+            }}
+            disabled={confirmText !== guardName}
+            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Delete Guard
+          </button>
+        </div>
+      </div>
                     </td>
                   </tr>
                 ))
