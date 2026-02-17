@@ -175,7 +175,7 @@ export default function GuardsPage() {
           guard={authModal}
           sites={sites}
           onClose={() => setAuthModal(null)}
-          onSubmit={(data) => authorizeMut.mutate({ guardId: authModal.id, ...data })}
+          onSubmit={(data: any) => authorizeMut.mutate({ guardId: authModal.id, ...data })}
           loading={authorizeMut.isPending}
         />
       )}
