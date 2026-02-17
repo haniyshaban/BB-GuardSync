@@ -21,10 +21,14 @@ export async function api<T = any>(
   const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
 
   if (res.status === 401) {
+    const hadToken = !!localStorage.getItem('bb_token');
     localStorage.removeItem('bb_token');
     localStorage.removeItem('bb_user');
-    window.location.href = '/login';
-    throw new Error('Unauthorized');
+    const body = await res.json().catch(() => ({}));
+    if (hadToken) {
+      window.location.href = '/login';
+    }
+    throw new Error(body.error || 'Invalid credentials');
   }
 
   // Handle CSV downloads
