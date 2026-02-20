@@ -20,7 +20,16 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
     throw new Error('Unauthorized');
   }
 
-  const data = await res.json();
+  const text = await res.text();
+  if (!text) throw new Error('Empty response from server');
+
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('Server returned an invalid response. Check that VITE_API_URL is set correctly.');
+  }
+
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
 }
