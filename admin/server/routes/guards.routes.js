@@ -37,7 +37,12 @@ router.post('/enroll', (req, res) => {
     const result = db.prepare(`
       INSERT INTO guards (name, phone, email, password, photo_url, face_descriptor, org_id, approval_status)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
-    `).run(name, phone, email, hashedPassword, photoUrl || null, faceDescriptor || null, org.id);
+    `).run(
+      name, phone, email, hashedPassword,
+      photoUrl || null,
+      faceDescriptor ? JSON.stringify(Array.isArray(faceDescriptor) ? faceDescriptor : JSON.parse(faceDescriptor)) : null,
+      org.id
+    );
 
     res.status(201).json({
       success: true,

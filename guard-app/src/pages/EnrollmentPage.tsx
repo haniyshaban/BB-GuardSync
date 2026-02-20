@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { guardApi } from '@/services/api';
-import { ArrowLeft, Eye, EyeOff, CheckCircle, Building2 } from 'lucide-react';
+import FaceCapture from '@/components/FaceCapture';
+import { ArrowLeft, Eye, EyeOff, CheckCircle, Building2, ScanFace } from 'lucide-react';
 
 export default function EnrollmentPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [step, setStep] = useState<'form' | 'success'>('form');
+  const [step, setStep] = useState<'form' | 'face' | 'success'>('form');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [orgName, setOrgName] = useState('');
   const [orgValidating, setOrgValidating] = useState(false);
@@ -71,6 +73,13 @@ export default function EnrollmentPage() {
       return;
     }
 
+    // Proceed to face scan step
+    setStep('face');
+  };
+
+  const handleFaceCaptured = async (descriptor: number[]) => {
+    setFaceDescriptor(descriptor);
+    setError('');
     setLoading(true);
     try {
       await guardApi.enroll({
@@ -79,15 +88,28 @@ export default function EnrollmentPage() {
         email: form.email,
         password: form.password,
         orgCode: form.orgCode.trim(),
+        faceDescriptor: descriptor,
       });
       setSuccessOrgName(orgName);
       setStep('success');
     } catch (err: any) {
       setError(err.message || 'Enrollment failed');
+      setStep('form');
     } finally {
       setLoading(false);
     }
   };
+
+  if (step === 'face') {
+    return (
+      <FaceCapture
+        title="Face Enrollment"
+        instruction="Your face is used to verify your identity during shifts"
+        onCapture={handleFaceCaptured}
+        onCancel={() => setStep('form')}
+      />
+    );
+  }
 
   if (step === 'success') {
     return (
@@ -192,8 +214,9 @@ export default function EnrollmentPage() {
           {error && <p className="text-red-600 text-sm">{error}</p>}
 
           <button type="submit" disabled={loading || !orgValidated}
-            className="w-full bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-gray-800 disabled:opacity-50">
-            {loading ? 'Submitting...' : 'Submit Enrollment'}
+            className="w-full bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2">
+            <ScanFace className="w-5 h-5" />
+            {loading ? 'Submitting...' : 'Continue to Face Scan'}
           </button>
         </form>
       </div>

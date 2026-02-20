@@ -3,7 +3,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { guardApi } from '@/services/api';
 import { startLocationTracking, stopLocationTracking } from '@/services/LocationService';
 import { startFaceCheckPolling, stopFaceCheckPolling } from '@/services/FaceCheckService';
-import { Clock, LogIn, LogOut, MapPin, AlertCircle, CheckCircle, Wifi, WifiOff } from 'lucide-react';
+import FaceCapture from '@/components/FaceCapture';
+import { Clock, LogIn, LogOut, MapPin, AlertCircle, CheckCircle, Wifi, WifiOff, XCircle } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user, refreshUser, updateUser } = useAuth();
@@ -13,6 +14,8 @@ export default function DashboardPage() {
   const [clockInTime, setClockInTime] = useState(user?.clock_in_time || '');
   const [faceCheckDue, setFaceCheckDue] = useState<any[]>([]);
   const [faceCheckOpen, setFaceCheckOpen] = useState(false);
+  const [faceCheckResult, setFaceCheckResult] = useState<'passed' | 'failed' | null>(null);
+  const [activeFaceCheckId, setActiveFaceCheckId] = useState<number | null>(null);
 
   // Refresh user data on mount
   useEffect(() => {
@@ -96,16 +99,34 @@ export default function DashboardPage() {
     }
   };
 
-  const handleFaceCheckSubmit = async (checkId: number) => {
-    // In real app, this would use camera + face-api.js
-    // For now, simulate a pass
+  const openFaceCheck = () => {
+    if (faceCheckDue.length === 0) return;
+    setActiveFaceCheckId(faceCheckDue[0].id);
+    setFaceCheckResult(null);
+    setFaceCheckOpen(true);
+  };
+
+  const handleFaceCaptured = async (descriptor: number[]) => {
+    setFaceCheckOpen(false);
+    if (!activeFaceCheckId) return;
     try {
-      await guardApi.submitFaceCheckResult(checkId, true);
-      setFaceCheckDue(prev => prev.filter(c => c.id !== checkId));
-      if (faceCheckDue.length <= 1) setFaceCheckOpen(false);
+      const res = await guardApi.submitFaceCheckResult(activeFaceCheckId, descriptor);
+      const passed = res.data?.passed;
+      setFaceCheckResult(passed ? 'passed' : 'failed');
+      if (passed) {
+        setFaceCheckDue(prev => prev.filter(c => c.id !== activeFaceCheckId));
+      }
     } catch (err: any) {
       setError(err.message);
     }
+    setActiveFaceCheckId(null);
+  };
+
+  const handleFaceCheckSubmit = async (checkId: number) => {
+    // kept for legacy; openFaceCheck() is the new entry point
+    setActiveFaceCheckId(checkId);
+    setFaceCheckResult(null);
+    setFaceCheckOpen(true);
   };
 
   const elapsed = clockInTime
@@ -116,6 +137,32 @@ export default function DashboardPage() {
 
   return (
     <div className="px-4 pt-6 safe-top">
+      {/* Face Capture Overlay */}
+      {faceCheckOpen && (
+        <FaceCapture
+          title="Identity Verification"
+          instruction="This check confirms you are on duty at your post"
+          onCapture={handleFaceCaptured}
+          onCancel={() => { setFaceCheckOpen(false); setActiveFaceCheckId(null); }}
+        />
+      )}
+
+      {/* Face Check Result Toast */}
+      {faceCheckResult && (
+        <div className={`fixed top-4 left-4 right-4 z-40 rounded-xl p-4 flex items-center gap-3 shadow-lg ${
+          faceCheckResult === 'passed' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+        }`}>
+          {faceCheckResult === 'passed'
+            ? <CheckCircle className="w-6 h-6 flex-shrink-0" />
+            : <XCircle className="w-6 h-6 flex-shrink-0" />}
+          <div className="flex-1">
+            <p className="font-semibold">{faceCheckResult === 'passed' ? 'Verification Passed' : 'Verification Failed'}</p>
+            <p className="text-sm opacity-90">{faceCheckResult === 'passed' ? 'Identity confirmed.' : 'Face did not match. An alert has been logged.'}</p>
+          </div>
+          <button onClick={() => setFaceCheckResult(null)} className="opacity-70 hover:opacity-100"><XCircle className="w-5 h-5" /></button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6">
         <p className="text-sm text-gray-500">Good {getGreeting()},</p>
@@ -198,7 +245,7 @@ export default function DashboardPage() {
             Please complete your face verification check to confirm your presence.
           </p>
           <button
-            onClick={() => handleFaceCheckSubmit(faceCheckDue[0].id)}
+            onClick={openFaceCheck}
             className="w-full bg-amber-600 text-white py-2.5 rounded-lg font-medium hover:bg-amber-700"
           >
             Complete Face Check

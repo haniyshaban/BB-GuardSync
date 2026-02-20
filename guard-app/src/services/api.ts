@@ -43,7 +43,7 @@ export const guardApi = {
   getProfile: () => request('/auth/me'),
 
   // Enrollment
-  enroll: (data: { name: string; phone: string; email: string; password: string; orgCode: string; faceDescriptor?: string }) =>
+  enroll: (data: { name: string; phone: string; email: string; password: string; orgCode: string; faceDescriptor?: number[] }) =>
     request('/guards/enroll', { method: 'POST', body: JSON.stringify(data) }),
 
   // Validate org code
@@ -66,8 +66,8 @@ export const guardApi = {
   // Face checks
   getPendingFaceChecks: (guardId: number) => request(`/face-checks/pending/${guardId}`),
 
-  submitFaceCheckResult: (checkId: number, passed: boolean, faceDescriptor?: string) =>
-    request(`/face-checks/${checkId}/result`, { method: 'POST', body: JSON.stringify({ passed, faceDescriptor }) }),
+  submitFaceCheckResult: (checkId: number, faceDescriptor: number[]) =>
+    request(`/face-checks/${checkId}/result`, { method: 'POST', body: JSON.stringify({ faceDescriptor }) }),
 
   // Payroll
   getPayroll: () => request('/payroll'),

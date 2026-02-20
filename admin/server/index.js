@@ -48,6 +48,67 @@ function seedDemoData() {
 seedDemoData();
 seedDefaultAdmin();
 
+// ============ RANDOM FACE CHECK SCHEDULER ============
+// Every 30 minutes: give each clocked-in guard a ~40% chance of receiving a face check
+function scheduleRandomFaceChecks() {
+  try {
+    const clockedInGuards = db.prepare(
+      "SELECT id FROM guards WHERE clocked_in = 1 AND approval_status = 'active'"
+    ).all();
+
+    let scheduled = 0;
+    for (const guard of clockedInGuards) {
+      if (Math.random() > 0.4) continue; // 40% chance
+
+      // Skip if already has a pending check
+      const existing = db.prepare(
+        "SELECT id FROM face_checks WHERE guard_id = ? AND status = 'pending'"
+      ).get(guard.id);
+      if (existing) continue;
+
+      // Schedule check for now (due immediately)
+      db.prepare(
+        'INSERT INTO face_checks (guard_id, scheduled_for) VALUES (?, datetime("now"))'
+      ).run(guard.id);
+      scheduled++;
+    }
+
+    if (scheduled > 0) {
+      console.log(`[FaceCheck Scheduler] Scheduled ${scheduled} face checks`);
+    }
+  } catch (err) {
+    console.error('[FaceCheck Scheduler] Error:', err.message);
+  }
+}
+
+// Also expire any face checks that have been pending for more than 15 minutes
+function expireOldFaceChecks() {
+  try {
+    const expired = db.prepare(`
+      UPDATE face_checks SET status = 'expired'
+      WHERE status = 'pending' AND scheduled_for < datetime('now', '-15 minutes')
+    `).run();
+    if (expired.changes > 0) {
+      console.log(`[FaceCheck Scheduler] Expired ${expired.changes} overdue checks`);
+    }
+  } catch (err) {
+    console.error('[FaceCheck Scheduler] Expire error:', err.message);
+  }
+}
+
+// Run every 30 minutes
+const FACE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
+setInterval(() => {
+  expireOldFaceChecks();
+  scheduleRandomFaceChecks();
+}, FACE_CHECK_INTERVAL_MS);
+
+// Run once on startup (after 1 min delay to let server warm up)
+setTimeout(() => {
+  expireOldFaceChecks();
+  scheduleRandomFaceChecks();
+}, 60 * 1000);
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
