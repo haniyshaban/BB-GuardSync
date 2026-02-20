@@ -55,6 +55,10 @@ router.post('/clock-in', authMiddleware, (req, res) => {
     db.prepare("UPDATE guards SET clocked_in = 1, clock_in_time = ?, updated_at = datetime('now') WHERE id = ?")
       .run(clockIn, guardId);
 
+    // Expire any stale pending face checks from previous sessions before scheduling new ones
+    db.prepare("UPDATE face_checks SET status = 'expired' WHERE guard_id = ? AND status = 'pending'")
+      .run(guardId);
+
     // Schedule face checks for this shift
     scheduleFaceChecks(guardId, guard.shift_id);
 
