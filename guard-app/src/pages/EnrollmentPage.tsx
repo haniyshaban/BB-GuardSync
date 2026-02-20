@@ -73,6 +73,26 @@ export default function EnrollmentPage() {
       return;
     }
 
+    // Validate org code if not already validated
+    if (!orgValidated) {
+      if (!form.orgCode.trim()) {
+        setError('Please enter your organization code');
+        return;
+      }
+      setLoading(true);
+      try {
+        const res = await guardApi.validateOrgCode(form.orgCode.trim());
+        setOrgName(res.data.name);
+        setOrgValidated(true);
+      } catch (err: any) {
+        setError(err.message || 'Invalid organization code');
+        setLoading(false);
+        return;
+      } finally {
+        setLoading(false);
+      }
+    }
+
     // Proceed to face scan step
     setStep('face');
   };
@@ -213,10 +233,10 @@ export default function EnrollmentPage() {
 
           {error && <p className="text-red-600 text-sm">{error}</p>}
 
-          <button type="submit" disabled={loading || !orgValidated}
+          <button type="submit" disabled={loading}
             className="w-full bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2">
             <ScanFace className="w-5 h-5" />
-            {loading ? 'Submitting...' : 'Continue to Face Scan'}
+            {loading ? 'Verifying...' : 'Continue to Face Scan'}
           </button>
         </form>
       </div>
