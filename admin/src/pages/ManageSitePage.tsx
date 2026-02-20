@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/utils';
-import { ArrowLeft, Plus, Trash2, AlertTriangle, Search, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, AlertTriangle, Search, ChevronDown, Clock, Pencil } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
 export default function ManageSitePage() {
@@ -11,6 +11,7 @@ export default function ManageSitePage() {
   const [showAddGuard, setShowAddGuard] = useState(false);
   const [showAddStaff, setShowAddStaff] = useState(false);
   const [showDeleteSite, setShowDeleteSite] = useState(false);
+  const [shiftDialog, setShiftDialog] = useState<{ open: boolean; shift?: any }>({ open: false });
 
   const { data: siteRes, isLoading } = useQuery({
     queryKey: ['site', id],
@@ -61,6 +62,11 @@ export default function ManageSitePage() {
     },
   });
 
+  const deleteShiftMut = useMutation({
+    mutationFn: (shiftId: number) => api(`/sites/${id}/shifts/${shiftId}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['site', id] }),
+  });
+
   const deleteSiteMut = useMutation({
     mutationFn: () => api(`/sites/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
@@ -107,21 +113,50 @@ export default function ManageSitePage() {
 
       {/* Shifts */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold mb-4">Shifts</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold">Shifts ({site.shifts?.length || 0})</h2>
+          <button
+            onClick={() => setShiftDialog({ open: true })}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800"
+          >
+            <Plus className="w-4 h-4" /> Add Shift
+          </button>
+        </div>
         {site.shifts?.length > 0 ? (
           <div className="space-y-2">
             {site.shifts.map((shift: any) => (
               <div key={shift.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="font-medium">{shift.label}</p>
-                  <p className="text-sm text-gray-500">{shift.start_time} — {shift.end_time}</p>
+                <div className="flex items-center gap-3">
+                  <Clock className="w-4 h-4 text-gray-400" />
+                  <div>
+                    <p className="font-medium text-sm">{shift.label}</p>
+                    <p className="text-xs text-gray-500">{shift.start_time} — {shift.end_time}</p>
+                  </div>
                 </div>
-                <span className="text-xs bg-gray-200 px-2 py-1 rounded">{shift.guardCount || 0} guards</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setShiftDialog({ open: true, shift })}
+                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-lg"
+                    title="Edit shift"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Delete shift "${shift.label}"? Guards assigned to this shift will be unassigned.`))
+                        deleteShiftMut.mutate(shift.id);
+                    }}
+                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                    title="Delete shift"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-500">No shifts defined</p>
+          <p className="text-sm text-gray-500 text-center py-4">No shifts defined. Add a shift to assign guards.</p>
         )}
       </div>
 
@@ -259,6 +294,19 @@ export default function ManageSitePage() {
           siteName={site.name}
           onClose={() => setShowDeleteSite(false)}
           onConfirm={() => deleteSiteMut.mutate()}
+        />
+      )}
+
+      {/* Shift Add/Edit Dialog */}
+      {shiftDialog.open && (
+        <ShiftDialog
+          siteId={Number(id)}
+          shift={shiftDialog.shift}
+          onClose={() => setShiftDialog({ open: false })}
+          onSuccess={() => {
+            qc.invalidateQueries({ queryKey: ['site', id] });
+            setShiftDialog({ open: false });
+          }}
         />
       )}
     </div>
@@ -624,6 +672,153 @@ function AddStaffToSiteDialog({
             className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
           >
             {loading ? 'Assigning...' : 'Assign Staff'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+const DAYS = [
+  { key: 'mon', label: 'Mon' },
+  { key: 'tue', label: 'Tue' },
+  { key: 'wed', label: 'Wed' },
+  { key: 'thu', label: 'Thu' },
+  { key: 'fri', label: 'Fri' },
+  { key: 'sat', label: 'Sat' },
+  { key: 'sun', label: 'Sun' },
+];
+
+function ShiftDialog({
+  siteId,
+  shift,
+  onClose,
+  onSuccess,
+}: {
+  siteId: number;
+  shift?: any;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const isEdit = !!shift;
+  const [label, setLabel] = useState(shift?.label || '');
+  const [startTime, setStartTime] = useState(shift?.start_time || '');
+  const [endTime, setEndTime] = useState(shift?.end_time || '');
+  const [days, setDays] = useState<string[]>(
+    shift?.daysOfWeek || ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+  );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const toggleDay = (day: string) =>
+    setDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!label.trim() || !startTime || !endTime) {
+      setError('All fields are required');
+      return;
+    }
+    if (days.length === 0) {
+      setError('Select at least one day');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      if (isEdit) {
+        await api(`/sites/${siteId}/shifts/${shift.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ label, startTime, endTime, daysOfWeek: days }),
+        });
+      } else {
+        await api(`/sites/${siteId}/shifts`, {
+          method: 'POST',
+          body: JSON.stringify({ label, startTime, endTime, daysOfWeek: days }),
+        });
+      }
+      onSuccess();
+    } catch (err: any) {
+      setError(err.message || 'Failed to save shift');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <h2 className="text-lg font-semibold mb-4">{isEdit ? 'Edit Shift' : 'Add Shift'}</h2>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Shift Name *</label>
+            <input
+              type="text"
+              value={label}
+              onChange={e => setLabel(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+              placeholder="e.g. Day Shift, Night Shift"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">Start Time *</label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={e => setStartTime(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">End Time *</label>
+              <input
+                type="time"
+                value={endTime}
+                onChange={e => setEndTime(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Days of Week *</label>
+            <div className="flex gap-1.5 flex-wrap">
+              {DAYS.map(d => (
+                <button
+                  key={d.key}
+                  type="button"
+                  onClick={() => toggleDay(d.key)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                    days.includes(d.key)
+                      ? 'bg-gray-900 text-white border-gray-900'
+                      : 'bg-white text-gray-600 border-gray-300 hover:border-gray-500'
+                  }`}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50">
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+          >
+            {loading ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Shift'}
           </button>
         </div>
       </form>
