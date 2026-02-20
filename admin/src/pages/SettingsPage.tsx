@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/utils';
 import { useState, useEffect } from 'react';
-import { Settings, Save, AlertCircle, KeyRound } from 'lucide-react';
+import { Settings, Save, AlertCircle, KeyRound, Building2, Copy, Check } from 'lucide-react';
 
 export default function SettingsPage() {
   const qc = useQueryClient();
@@ -9,6 +9,22 @@ export default function SettingsPage() {
     queryKey: ['config'],
     queryFn: () => api('/config'),
   });
+
+  const { data: orgRes } = useQuery({
+    queryKey: ['org-me'],
+    queryFn: () => api('/org/me'),
+  });
+
+  const [copied, setCopied] = useState(false);
+
+  const copyOrgCode = () => {
+    const code = orgRes?.data?.invite_code;
+    if (!code) return;
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   const [form, setForm] = useState({
     locationUpdateIntervalMins: 30,
@@ -103,6 +119,33 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
         <p className="text-sm text-gray-500">System configuration for Black Belt - GuardSync</p>
+      </div>
+
+      {/* Organization Code */}
+      <div className="bg-white rounded-xl border p-6">
+        <h2 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+          <Building2 className="w-5 h-5" /> Organization Code
+        </h2>
+        <p className="text-sm text-gray-500 mb-4">Share this code with guards so they can enroll under your organization.</p>
+        {orgRes?.data?.invite_code ? (
+          <div className="flex items-center gap-3">
+            <div className="flex-1 px-4 py-3 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl">
+              <span className="text-2xl font-mono font-bold tracking-widest text-gray-900">
+                {orgRes.data.invite_code}
+              </span>
+            </div>
+            <button
+              onClick={copyOrgCode}
+              className={`flex items-center gap-2 px-4 py-3 rounded-xl font-medium text-sm transition-colors ${
+                copied ? 'bg-green-100 text-green-700' : 'bg-gray-900 text-white hover:bg-gray-800'
+              }`}
+            >
+              {copied ? <><Check className="w-4 h-4" /> Copied!</> : <><Copy className="w-4 h-4" /> Copy</>}
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 italic">No organization linked to this account. Register via the organization registration page to get a code.</p>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border p-6 space-y-6">

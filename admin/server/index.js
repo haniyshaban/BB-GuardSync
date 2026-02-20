@@ -16,15 +16,33 @@ const db = require('./db');
 function seedDefaultAdmin() {
   try {
     const bcrypt = require('bcryptjs');
+    const crypto = require('crypto');
+
+    // Ensure a default org exists
+    let org = db.prepare('SELECT id, invite_code FROM organizations LIMIT 1').get();
+    if (!org) {
+      const inviteCode = process.env.ORG_INVITE_CODE ||
+        ('BBGS-' + crypto.randomBytes(2).toString('hex').toUpperCase());
+      const result = db.prepare(
+        'INSERT OR IGNORE INTO organizations (name, slug, invite_code, is_active) VALUES (?, ?, ?, 1)'
+      ).run('Black Belt GuardSync', 'black-belt-guardsync', inviteCode);
+      org = { id: result.lastInsertRowid, invite_code: inviteCode };
+      console.log(`  ✓ Default organization created (code: ${inviteCode})`);
+    }
+
     const existing = db.prepare('SELECT id FROM staff WHERE role = ?').get('admin');
     if (!existing) {
       const email = process.env.ADMIN_EMAIL || 'admin@blackbelt.app';
       const password = process.env.ADMIN_PASSWORD || 'admin123';
       const hash = bcrypt.hashSync(password, 10);
       db.prepare(
-        'INSERT OR IGNORE INTO staff (name, email, password, phone, role, site_id) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run('Admin User', email, hash, '0000000000', 'admin', null);
+        'INSERT OR IGNORE INTO staff (name, email, password, phone, role, org_id) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run('Admin User', email, hash, '0000000000', 'admin', org.id);
       console.log(`  ✓ Default admin created: ${email}`);
+    } else {
+      // Link existing admin to the org if not already linked
+      db.prepare('UPDATE staff SET org_id = ? WHERE id = ? AND org_id IS NULL')
+        .run(org.id, existing.id);
     }
   } catch (err) {
     console.error('Auto-seed admin error:', err.message);
