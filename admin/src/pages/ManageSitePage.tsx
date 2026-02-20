@@ -1,8 +1,8 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/utils';
-import { ArrowLeft, Plus, Trash2, AlertTriangle } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowLeft, Plus, Trash2, AlertTriangle, Search, ChevronDown } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 
 export default function ManageSitePage() {
   const { id } = useParams();
@@ -29,7 +29,7 @@ export default function ManageSitePage() {
 
   const { data: allGuardsRes } = useQuery({
     queryKey: ['guards-unassigned'],
-    queryFn: () => api('/guards?status=active'),
+    queryFn: () => api('/guards?approvalStatus=active&limit=200'),
     enabled: showAddGuard,
   });
 
@@ -280,20 +280,40 @@ function AddGuardToSiteDialog({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const [selectedGuardId, setSelectedGuardId] = useState('');
+  const [selectedGuard, setSelectedGuard] = useState<any>(null);
   const [selectedShiftId, setSelectedShiftId] = useState('');
+  const [guardSearch, setGuardSearch] = useState('');
+  const [guardOpen, setGuardOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const existingGuardIds = new Set(existingGuards.map(g => g.id));
-  const availableGuards = allGuards.filter(g => !existingGuardIds.has(g.id) && g.approval_status === 'active');
+  const availableGuards = allGuards.filter(
+    g => !existingGuardIds.has(g.id) && g.approval_status === 'active'
+  );
+  const filteredGuards = availableGuards.filter(g =>
+    g.name.toLowerCase().includes(guardSearch.toLowerCase()) ||
+    g.phone.includes(guardSearch) ||
+    (g.employee_id || '').toLowerCase().includes(guardSearch.toLowerCase())
+  );
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setGuardOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedGuardId || !selectedShiftId) return;
-
+    if (!selectedGuard || !selectedShiftId) return;
     setLoading(true);
     try {
-      await api(`/guards/${selectedGuardId}`, {
+      await api(`/guards/${selectedGuard.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ site_id: siteId, shift_id: Number(selectedShiftId) }),
       });
@@ -311,26 +331,65 @@ function AddGuardToSiteDialog({
         <h2 className="text-lg font-semibold mb-4">Add Guard to Site</h2>
 
         <div className="space-y-4">
+          {/* Searchable guard picker */}
           <div>
             <label className="block text-sm font-medium mb-2">Select Guard *</label>
-            <select
-              value={selectedGuardId}
-              onChange={(e) => setSelectedGuardId(e.target.value)}
-              required
-              className="w-full px-3 py-2 border rounded-lg"
-            >
-              <option value="">Choose a guard...</option>
-              {availableGuards.map((guard: any) => (
-                <option key={guard.id} value={guard.id}>
-                  {guard.name} ({guard.phone})
-                </option>
-              ))}
-            </select>
-            {availableGuards.length === 0 && (
-              <p className="text-xs text-gray-500 mt-1">No available guards to assign</p>
-            )}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                type="button"
+                onClick={() => { setGuardOpen(v => !v); setGuardSearch(''); }}
+                className="w-full flex items-center justify-between px-3 py-2 border rounded-lg text-left hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+              >
+                <span className={selectedGuard ? 'text-gray-900' : 'text-gray-400'}>
+                  {selectedGuard ? `${selectedGuard.name} — ${selectedGuard.phone}` : 'Search and choose a guard…'}
+                </span>
+                <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              </button>
+
+              {guardOpen && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+                  {/* Search input */}
+                  <div className="p-2 border-b">
+                    <div className="flex items-center gap-2 px-2 py-1.5 border rounded-md bg-gray-50">
+                      <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder="Name, phone or ID…"
+                        value={guardSearch}
+                        onChange={e => setGuardSearch(e.target.value)}
+                        className="flex-1 bg-transparent text-sm outline-none"
+                      />
+                    </div>
+                  </div>
+                  {/* Guard list */}
+                  <ul className="max-h-52 overflow-y-auto">
+                    {filteredGuards.length === 0 ? (
+                      <li className="px-4 py-3 text-sm text-gray-400">
+                        {availableGuards.length === 0 ? 'No active guards available' : 'No matches found'}
+                      </li>
+                    ) : filteredGuards.map((g: any) => (
+                      <li
+                        key={g.id}
+                        onClick={() => { setSelectedGuard(g); setGuardOpen(false); }}
+                        className={`flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-gray-50 ${
+                          selectedGuard?.id === g.id ? 'bg-gray-100 font-medium' : ''
+                        }`}
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{g.name}</p>
+                          <p className="text-xs text-gray-500">{g.phone}{g.employee_id ? ` • ${g.employee_id}` : ''}{g.site_name ? ` • ${g.site_name}` : ' • Unassigned'}</p>
+                        </div>
+                        {selectedGuard?.id === g.id && <span className="text-xs text-green-600 font-semibold">✓</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
 
+          {/* Shift picker */}
           <div>
             <label className="block text-sm font-medium mb-2">Select Shift *</label>
             <select
@@ -353,16 +412,12 @@ function AddGuardToSiteDialog({
         </div>
 
         <div className="flex gap-3 mt-6">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
-          >
+          <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50">
             Cancel
           </button>
           <button
             type="submit"
-            disabled={loading || !availableGuards.length || !site.shifts?.length}
+            disabled={loading || !selectedGuard || !selectedShiftId}
             className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
           >
             {loading ? 'Adding...' : 'Add Guard'}
@@ -451,19 +506,35 @@ function AddStaffToSiteDialog({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const [selectedStaffId, setSelectedStaffId] = useState('');
+  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [staffSearch, setStaffSearch] = useState('');
+  const [staffOpen, setStaffOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const existingStaffIds = new Set(existingStaff.map(s => s.id));
   const availableStaff = allStaff.filter(s => !existingStaffIds.has(s.id) && s.role === 'staff');
+  const filteredStaff = availableStaff.filter(s =>
+    s.name.toLowerCase().includes(staffSearch.toLowerCase()) ||
+    s.email.toLowerCase().includes(staffSearch.toLowerCase())
+  );
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setStaffOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedStaffId) return;
-
+    if (!selectedMember) return;
     setLoading(true);
     try {
-      await api(`/staff/${selectedStaffId}`, {
+      await api(`/staff/${selectedMember.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ site_id: siteId }),
       });
@@ -483,19 +554,57 @@ function AddStaffToSiteDialog({
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-2">Select Staff Member *</label>
-            <select
-              value={selectedStaffId}
-              onChange={(e) => setSelectedStaffId(e.target.value)}
-              required
-              className="w-full px-3 py-2 border rounded-lg"
-            >
-              <option value="">Choose a staff member...</option>
-              {availableStaff.map((member: any) => (
-                <option key={member.id} value={member.id}>
-                  {member.name} ({member.email}) {member.site_name ? `- Currently at ${member.site_name}` : '- Unassigned'}
-                </option>
-              ))}
-            </select>
+            <div className="relative" ref={dropdownRef}>
+              <button
+                type="button"
+                onClick={() => { setStaffOpen(v => !v); setStaffSearch(''); }}
+                className="w-full flex items-center justify-between px-3 py-2 border rounded-lg text-left hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+              >
+                <span className={selectedMember ? 'text-gray-900' : 'text-gray-400'}>
+                  {selectedMember ? `${selectedMember.name} — ${selectedMember.email}` : 'Search and choose a staff member…'}
+                </span>
+                <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              </button>
+
+              {staffOpen && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+                  <div className="p-2 border-b">
+                    <div className="flex items-center gap-2 px-2 py-1.5 border rounded-md bg-gray-50">
+                      <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder="Name or email…"
+                        value={staffSearch}
+                        onChange={e => setStaffSearch(e.target.value)}
+                        className="flex-1 bg-transparent text-sm outline-none"
+                      />
+                    </div>
+                  </div>
+                  <ul className="max-h-52 overflow-y-auto">
+                    {filteredStaff.length === 0 ? (
+                      <li className="px-4 py-3 text-sm text-gray-400">
+                        {availableStaff.length === 0 ? 'No staff available' : 'No matches found'}
+                      </li>
+                    ) : filteredStaff.map((s: any) => (
+                      <li
+                        key={s.id}
+                        onClick={() => { setSelectedMember(s); setStaffOpen(false); }}
+                        className={`flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-gray-50 ${
+                          selectedMember?.id === s.id ? 'bg-gray-100 font-medium' : ''
+                        }`}
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{s.name}</p>
+                          <p className="text-xs text-gray-500">{s.email}{s.site_name ? ` • Currently at ${s.site_name}` : ' • Unassigned'}</p>
+                        </div>
+                        {selectedMember?.id === s.id && <span className="text-xs text-green-600 font-semibold">✓</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
             {availableStaff.length === 0 && (
               <p className="text-xs text-gray-500 mt-1">No available staff members to assign</p>
             )}
@@ -506,16 +615,12 @@ function AddStaffToSiteDialog({
         </div>
 
         <div className="flex gap-3 mt-6">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
-          >
+          <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50">
             Cancel
           </button>
           <button
             type="submit"
-            disabled={loading || !availableStaff.length}
+            disabled={loading || !selectedMember}
             className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
           >
             {loading ? 'Assigning...' : 'Assign Staff'}
