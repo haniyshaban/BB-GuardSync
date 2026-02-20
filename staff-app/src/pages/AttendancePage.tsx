@@ -15,9 +15,11 @@ export default function AttendancePage() {
 
   const exportCSV = async () => {
     try {
-      const res = await fetch(`/api/attendance/export?date=${dateFilter}`, {
+      const base = (import.meta.env.VITE_API_URL as string) || '/api';
+      const res = await fetch(`${base}/attendance/export?dateFrom=${dateFilter}&dateTo=${dateFilter}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('bb_staff_token')}` },
       });
+      if (!res.ok) throw new Error('Export failed');
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

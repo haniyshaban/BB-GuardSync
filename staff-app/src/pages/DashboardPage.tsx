@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { api, statusBadge } from '@/lib/utils';
 import { Users, UserCheck, Clock, AlertCircle } from 'lucide-react';
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
+
   const { data: stats } = useQuery({
     queryKey: ['stats'],
     queryFn: () => api('/stats/dashboard'),
@@ -12,10 +15,10 @@ export default function DashboardPage() {
   const s = stats?.data;
 
   const cards = [
-    { label: 'Total Guards', value: s?.totalGuards ?? '-', icon: Users, color: 'bg-blue-500' },
-    { label: 'Online Now', value: s?.onlineGuards ?? '-', icon: UserCheck, color: 'bg-green-500' },
-    { label: 'Idle', value: s?.idleGuards ?? '-', icon: Clock, color: 'bg-yellow-500' },
-    { label: 'Pending Enrollment', value: s?.pendingEnrollments ?? '-', icon: AlertCircle, color: 'bg-orange-500' },
+    { label: 'Total Guards', value: s?.totalGuards ?? '-', icon: Users, color: 'bg-blue-500', to: '/guards' },
+    { label: 'Online Now', value: s?.onlineGuards ?? '-', icon: UserCheck, color: 'bg-green-500', to: '/guards?status=online' },
+    { label: 'Idle', value: s?.idleGuards ?? '-', icon: Clock, color: 'bg-yellow-500', to: '/guards?status=idle' },
+    { label: 'Pending Enrollment', value: s?.pendingEnrollments ?? '-', icon: AlertCircle, color: 'bg-orange-500', to: '/guards?approval=pending' },
   ];
 
   // recent attendance
@@ -31,15 +34,19 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-2 gap-3 mb-6">
         {cards.map(c => (
-          <div key={c.label} className="bg-white rounded-xl border p-4 flex items-start gap-3">
-            <div className={`${c.color} p-2 rounded-lg text-white`}>
+          <button
+            key={c.label}
+            onClick={() => navigate(c.to)}
+            className="bg-white rounded-xl border p-4 flex items-start gap-3 text-left hover:shadow-md hover:border-slate-300 active:scale-95 transition-all cursor-pointer"
+          >
+            <div className={`${c.color} p-2 rounded-lg text-white shrink-0`}>
               <c.icon className="w-5 h-5" />
             </div>
             <div>
               <p className="text-2xl font-bold">{c.value}</p>
               <p className="text-xs text-gray-500">{c.label}</p>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 

@@ -1,15 +1,22 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { api, statusBadge } from '@/lib/utils';
 import { Search, UserCircle } from 'lucide-react';
 
 export default function GuardsPage() {
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'online' | 'idle' | 'offline'>('all');
+  const initialStatus = searchParams.get('status') as 'online' | 'idle' | 'offline' | null;
+  const initialApproval = searchParams.get('approval');
+  const [filter, setFilter] = useState<'all' | 'online' | 'idle' | 'offline'>(initialStatus ?? 'all');
+  const [approvalFilter] = useState(initialApproval ?? '');
 
   const { data, isLoading } = useQuery({
-    queryKey: ['guards', search, filter],
-    queryFn: () => api(`/guards?search=${encodeURIComponent(search)}&status=${filter === 'all' ? '' : filter}`),
+    queryKey: ['guards', search, filter, approvalFilter],
+    queryFn: () => api(
+      `/guards?search=${encodeURIComponent(search)}&status=${filter === 'all' ? '' : filter}${approvalFilter ? `&approvalStatus=${approvalFilter}` : ''}`
+    ),
     refetchInterval: 30_000,
   });
 

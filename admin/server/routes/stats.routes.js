@@ -11,13 +11,24 @@ router.get('/dashboard', authMiddleware, (req, res) => {
     const config = db.prepare('SELECT * FROM system_config WHERE id = 1').get();
     const today = new Date().toISOString().split('T')[0];
 
+    // Scope to site for staff users
+    const siteId = (req.user.role === 'staff' && req.user.siteId) ? req.user.siteId : null;
+
     // Guard counts
-    const totalGuards = db.prepare("SELECT COUNT(*) as c FROM guards WHERE approval_status = 'active'").get()?.c || 0;
-    const pendingEnrollments = db.prepare("SELECT COUNT(*) as c FROM guards WHERE approval_status = 'pending'").get()?.c || 0;
-    const clockedInGuards = db.prepare("SELECT COUNT(*) as c FROM guards WHERE clocked_in = 1 AND approval_status = 'active'").get()?.c || 0;
+    const totalGuards = siteId
+      ? db.prepare("SELECT COUNT(*) as c FROM guards WHERE approval_status = 'active' AND site_id = ?").get(siteId)?.c || 0
+      : db.prepare("SELECT COUNT(*) as c FROM guards WHERE approval_status = 'active'").get()?.c || 0;
+    const pendingEnrollments = siteId
+      ? db.prepare("SELECT COUNT(*) as c FROM guards WHERE approval_status = 'pending' AND site_id = ?").get(siteId)?.c || 0
+      : db.prepare("SELECT COUNT(*) as c FROM guards WHERE approval_status = 'pending'").get()?.c || 0;
+    const clockedInGuards = siteId
+      ? db.prepare("SELECT COUNT(*) as c FROM guards WHERE clocked_in = 1 AND approval_status = 'active' AND site_id = ?").get(siteId)?.c || 0
+      : db.prepare("SELECT COUNT(*) as c FROM guards WHERE clocked_in = 1 AND approval_status = 'active'").get()?.c || 0;
 
     // Compute online vs idle for clocked-in guards
-    const clockedIn = db.prepare("SELECT * FROM guards WHERE clocked_in = 1 AND approval_status = 'active'").all();
+    const clockedIn = siteId
+      ? db.prepare("SELECT * FROM guards WHERE clocked_in = 1 AND approval_status = 'active' AND site_id = ?").all(siteId)
+      : db.prepare("SELECT * FROM guards WHERE clocked_in = 1 AND approval_status = 'active'").all();
     let onlineCount = 0, idleCount = 0;
 
     for (const guard of clockedIn) {
@@ -42,18 +53,18 @@ router.get('/dashboard', authMiddleware, (req, res) => {
     const offlineCount = totalGuards - clockedInGuards;
 
     // Today's attendance
-    const todayAttendance = db.prepare(
-      'SELECT COUNT(DISTINCT guard_id) as c FROM guard_attendance WHERE date = ?'
-    ).get(today)?.c || 0;
+    const todayAttendance = siteId
+      ? db.prepare('SELECT COUNT(DISTINCT guard_id) as c FROM guard_attendance WHERE date = ? AND site_id = ?').get(today, siteId)?.c || 0
+      : db.prepare('SELECT COUNT(DISTINCT guard_id) as c FROM guard_attendance WHERE date = ?').get(today)?.c || 0;
 
     // Sites
     const totalSites = db.prepare('SELECT COUNT(*) as c FROM sites').get()?.c || 0;
 
-    // Pending face checks
+    // Pending face checks (scoped to site via guard join)
     const now = new Date().toISOString();
-    const pendingFaceChecks = db.prepare(
-      "SELECT COUNT(*) as c FROM face_checks WHERE status = 'pending' AND scheduled_for <= ?"
-    ).get(now)?.c || 0;
+    const pendingFaceChecks = siteId
+      ? db.prepare("SELECT COUNT(*) as c FROM face_checks fc JOIN guards g ON fc.guard_id = g.id WHERE fc.status = 'pending' AND fc.scheduled_for <= ? AND g.site_id = ?").get(now, siteId)?.c || 0
+      : db.prepare("SELECT COUNT(*) as c FROM face_checks WHERE status = 'pending' AND scheduled_for <= ?").get(now)?.c || 0;
 
     res.json({
       success: true,

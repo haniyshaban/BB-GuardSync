@@ -49,6 +49,9 @@ export default function ManageSitePage() {
       qc.invalidateQueries({ queryKey: ['site-guards', id] });
       qc.invalidateQueries({ queryKey: ['guards'] });
     },
+    onError: (err: any) => {
+      alert(err?.message || 'Failed to remove guard from site');
+    },
   });
 
   const removeStaffMut = useMutation({
@@ -59,6 +62,9 @@ export default function ManageSitePage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['site-staff', id] });
       qc.invalidateQueries({ queryKey: ['staff'] });
+    },
+    onError: (err: any) => {
+      alert(err?.message || 'Failed to remove staff from site');
     },
   });
 
@@ -558,6 +564,7 @@ function AddStaffToSiteDialog({
   const [staffSearch, setStaffSearch] = useState('');
   const [staffOpen, setStaffOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [moveConfirm, setMoveConfirm] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const existingStaffIds = new Set(existingStaff.map(s => s.id));
@@ -577,8 +584,7 @@ function AddStaffToSiteDialog({
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const doAssign = async () => {
     if (!selectedMember) return;
     setLoading(true);
     try {
@@ -587,12 +593,65 @@ function AddStaffToSiteDialog({
         body: JSON.stringify({ site_id: siteId }),
       });
       onSuccess();
-    } catch (err) {
-      alert('Failed to assign staff to site');
+    } catch (err: any) {
+      alert(err?.message || 'Failed to assign staff to site');
     } finally {
       setLoading(false);
     }
   };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMember) return;
+    // If already assigned to a different site, ask for confirmation first
+    if (selectedMember.site_name) {
+      setMoveConfirm(true);
+    } else {
+      doAssign();
+    }
+  };
+
+  // Move confirmation modal
+  if (moveConfirm && selectedMember) {
+    return (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="p-2 bg-amber-100 rounded-lg shrink-0">
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Staff already assigned</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                <span className="font-medium">{selectedMember.name}</span> is currently assigned to{' '}
+                <span className="font-medium">{selectedMember.site_name}</span>.
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                Do you want to move them to <span className="font-medium">{siteName}</span>?
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setMoveConfirm(false)}
+              className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={doAssign}
+              className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 text-sm font-medium"
+            >
+              {loading ? 'Moving...' : `Move to ${siteName}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -657,9 +716,6 @@ function AddStaffToSiteDialog({
               <p className="text-xs text-gray-500 mt-1">No available staff members to assign</p>
             )}
           </div>
-          <p className="text-xs text-gray-500">
-            Note: If a staff member is currently assigned to another site, they will be reassigned to this site.
-          </p>
         </div>
 
         <div className="flex gap-3 mt-6">
