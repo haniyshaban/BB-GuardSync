@@ -1,10 +1,14 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { guardApi } from '@/services/api';
 import { startLocationTracking, stopLocationTracking } from '@/services/LocationService';
 import { startFaceCheckPolling, stopFaceCheckPolling } from '@/services/FaceCheckService';
 import FaceCapture from '@/components/FaceCapture';
 import { Clock, LogIn, LogOut, MapPin, AlertCircle, CheckCircle, Wifi, WifiOff, XCircle } from 'lucide-react';
+
+// Module-level set — persists across tab-switch remounts so the same face check
+// is never shown twice in the same browser session.
+const _shownFaceCheckIds = new Set<number>();
 
 export default function DashboardPage() {
   const { user, refreshUser, updateUser } = useAuth();
@@ -18,8 +22,6 @@ export default function DashboardPage() {
   const [activeFaceCheckId, setActiveFaceCheckId] = useState<number | null>(null);
   const [clockInFaceOpen, setClockInFaceOpen] = useState(false);
   const [clockInSuccess, setClockInSuccess] = useState(false);
-  // Track which face check IDs have already been shown to prevent re-triggering on tab switch
-  const shownFaceCheckIds = useRef<Set<number>>(new Set());
 
   // Refresh user data on mount
   useEffect(() => {
@@ -39,10 +41,10 @@ export default function DashboardPage() {
     if (clockedIn && user) {
       startLocationTracking(30); // Every 30 minutes
       startFaceCheckPolling(user.id, (checks) => {
-        // Only show checks that haven't been shown before (prevents re-trigger on tab switch)
-        const newChecks = checks.filter(c => !shownFaceCheckIds.current.has(c.id));
+        // Filter out checks already shown this session (module-level set survives tab-switch remounts)
+        const newChecks = checks.filter(c => !_shownFaceCheckIds.has(c.id));
         if (newChecks.length > 0) {
-          newChecks.forEach(c => shownFaceCheckIds.current.add(c.id));
+          newChecks.forEach(c => _shownFaceCheckIds.add(c.id));
           setFaceCheckDue(prev => {
             const existingIds = new Set(prev.map(c => c.id));
             return [...prev.filter(c => c), ...newChecks.filter(c => !existingIds.has(c.id))];
