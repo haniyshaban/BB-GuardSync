@@ -11,7 +11,8 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+  const url = `${API_BASE}${endpoint}`;
+  const res = await fetch(url, { ...options, headers });
   
   if (res.status === 401) {
     localStorage.removeItem('bb_guard_token');
@@ -21,13 +22,13 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
   }
 
   const text = await res.text();
-  if (!text) throw new Error('Empty response from server');
+  if (!text) throw new Error(`Empty response from server (${res.status} ${url})`);
 
   let data: any;
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error('Server returned an invalid response. Check that VITE_API_URL is set correctly.');
+    throw new Error(`Invalid response from ${url} (${res.status}): ${text.slice(0, 100)}`);
   }
 
   if (!res.ok) throw new Error(data.error || 'Request failed');
