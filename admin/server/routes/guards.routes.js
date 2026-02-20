@@ -186,6 +186,36 @@ router.put('/:id/reject', authMiddleware, requireRole('admin'), (req, res) => {
   }
 });
 
+// PATCH /api/guards/:id - Partial update (site/shift assignment, unassignment)
+router.patch('/:id', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
+  try {
+    const guard = db.prepare('SELECT * FROM guards WHERE id = ?').get(req.params.id);
+    if (!guard) return res.status(404).json({ success: false, error: 'Guard not found' });
+
+    // Accept both camelCase and snake_case keys; explicit null clears the field
+    const has = (key1, key2) => req.body.hasOwnProperty(key1) || req.body.hasOwnProperty(key2);
+    const val  = (key1, key2, fallback) => req.body.hasOwnProperty(key1) ? req.body[key1] : (req.body.hasOwnProperty(key2) ? req.body[key2] : fallback);
+
+    const siteId         = val('siteId', 'site_id', guard.site_id);
+    const shiftId        = val('shiftId', 'shift_id', guard.shift_id);
+    const dailyRate      = val('dailyRate', 'daily_rate', guard.daily_rate);
+    const employeeId     = val('employeeId', 'employee_id', guard.employee_id);
+    const approvalStatus = val('approvalStatus', 'approval_status', guard.approval_status);
+
+    db.prepare(`
+      UPDATE guards SET
+        site_id = ?, shift_id = ?, daily_rate = ?, employee_id = ?,
+        approval_status = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(siteId, shiftId, dailyRate, employeeId, approvalStatus, req.params.id);
+
+    res.json({ success: true, message: 'Guard updated' });
+  } catch (err) {
+    console.error('Patch guard error:', err);
+    res.status(500).json({ success: false, error: 'Update failed' });
+  }
+});
+
 // PUT /api/guards/:id - Update guard details
 router.put('/:id', authMiddleware, requireRole('admin'), (req, res) => {
   try {

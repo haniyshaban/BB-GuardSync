@@ -42,7 +42,7 @@ export default function ManageSitePage() {
   const removeGuardMut = useMutation({
     mutationFn: (guardId: number) => api(`/guards/${guardId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ site_id: null, shift_id: null }),
+      body: JSON.stringify({ siteId: null, shiftId: null }),
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['site-guards', id] });
