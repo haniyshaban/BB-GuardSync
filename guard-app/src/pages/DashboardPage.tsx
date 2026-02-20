@@ -6,9 +6,19 @@ import { startFaceCheckPolling, stopFaceCheckPolling } from '@/services/FaceChec
 import FaceCapture from '@/components/FaceCapture';
 import { Clock, LogIn, LogOut, MapPin, AlertCircle, CheckCircle, Wifi, WifiOff, XCircle } from 'lucide-react';
 
-// Module-level set — persists across tab-switch remounts so the same face check
-// is never shown twice in the same browser session.
-const _shownFaceCheckIds = new Set<number>();
+// Persist seen face-check IDs in sessionStorage so they survive component
+// remounts (tab switches) and in-flight polling races without resetting.
+const SEEN_KEY = 'bb_seen_face_checks';
+function getSeenIds(): Set<number> {
+  try { return new Set(JSON.parse(sessionStorage.getItem(SEEN_KEY) || '[]')); } catch { return new Set(); }
+}
+function markSeen(ids: number[]) {
+  try {
+    const all = getSeenIds();
+    ids.forEach(id => all.add(id));
+    sessionStorage.setItem(SEEN_KEY, JSON.stringify([...all]));
+  } catch {}
+}
 
 export default function DashboardPage() {
   const { user, refreshUser, updateUser } = useAuth();
@@ -41,10 +51,10 @@ export default function DashboardPage() {
     if (clockedIn && user) {
       startLocationTracking(30); // Every 30 minutes
       startFaceCheckPolling(user.id, (checks) => {
-        // Filter out checks already shown this session (module-level set survives tab-switch remounts)
-        const newChecks = checks.filter(c => !_shownFaceCheckIds.has(c.id));
+        // Filter checks already seen this session (sessionStorage survives remounts & races)
+        const newChecks = checks.filter(c => !getSeenIds().has(c.id));
         if (newChecks.length > 0) {
-          newChecks.forEach(c => _shownFaceCheckIds.add(c.id));
+          markSeen(newChecks.map(c => c.id));
           setFaceCheckDue(prev => {
             const existingIds = new Set(prev.map(c => c.id));
             return [...prev.filter(c => c), ...newChecks.filter(c => !existingIds.has(c.id))];
@@ -122,6 +132,9 @@ export default function DashboardPage() {
       setClockedIn(false);
       setClockInTime('');
       updateUser({ clocked_in: false, clock_in_time: undefined });
+      setFaceCheckDue([]);
+      // Clear seen check IDs so next shift gets fresh face checks
+      try { sessionStorage.removeItem(SEEN_KEY); } catch {}
     } catch (err: any) {
       setError(err.message);
     } finally {
