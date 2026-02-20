@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, statusColor, formatDate, formatDateTime } from '@/lib/utils';
-import { ArrowLeft, Phone, Mail, Building2, Clock, DollarSign, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, Building2, Clock, DollarSign, AlertTriangle, MapPin } from 'lucide-react';
 import { useState } from 'react';
 
 export default function GuardDetailPage() {
@@ -28,6 +28,12 @@ export default function GuardDetailPage() {
     enabled: tab === 'payroll',
   });
 
+  const { data: locationRes } = useQuery({
+    queryKey: ['guard-last-location', id],
+    queryFn: () => api(`/locations/${id}?limit=1`),
+    enabled: !!id,
+  });
+
   const deleteGuardMut = useMutation({
     mutationFn: () => api(`/guards/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
@@ -39,6 +45,7 @@ export default function GuardDetailPage() {
   if (isLoading) return <div className="flex justify-center py-12"><p className="text-gray-500">Loading...</p></div>;
 
   const guard = guardRes?.data;
+  const lastLocation = locationRes?.data?.[0];
   if (!guard) return <div className="text-center py-12"><p>Guard not found</p></div>;
 
   return (
@@ -90,6 +97,22 @@ export default function GuardDetailPage() {
             {guard.clock_in_time && <p><strong>Since:</strong> {formatDateTime(guard.clock_in_time)}</p>}
             <p><strong>Registered:</strong> {formatDate(guard.created_at)}</p>
           </div>
+          {lastLocation ? (
+            <a
+              href={`https://www.google.com/maps?q=${lastLocation.lat},${lastLocation.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 text-sm font-medium rounded-lg hover:bg-blue-100 transition-colors"
+            >
+              <MapPin className="w-4 h-4" />
+              Last Known Location
+            </a>
+          ) : (
+            <span className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-400 text-sm font-medium rounded-lg cursor-not-allowed">
+              <MapPin className="w-4 h-4" />
+              No Location Available
+            </span>
+          )}
         </div>
       </div>
 
