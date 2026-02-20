@@ -279,4 +279,23 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// PATCH /api/guards/me/face - Authenticated guard enrolls/updates their own face descriptor
+router.patch('/me/face', authMiddleware, (req, res) => {
+  try {
+    if (req.user.role !== 'guard') {
+      return res.status(403).json({ success: false, error: 'Guard only endpoint' });
+    }
+    const { faceDescriptor } = req.body;
+    if (!faceDescriptor || !Array.isArray(faceDescriptor) || faceDescriptor.length < 10) {
+      return res.status(400).json({ success: false, error: 'Invalid face descriptor' });
+    }
+    db.prepare("UPDATE guards SET face_descriptor = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(JSON.stringify(faceDescriptor), req.user.id);
+    res.json({ success: true, message: 'Face data enrolled successfully' });
+  } catch (err) {
+    console.error('Face update error:', err);
+    res.status(500).json({ success: false, error: 'Failed to update face data' });
+  }
+});
+
 module.exports = router;

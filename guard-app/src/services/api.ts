@@ -63,6 +63,10 @@ export const guardApi = {
   submitLocation: (lat: number, lng: number, accuracy?: number) =>
     request('/locations', { method: 'POST', body: JSON.stringify({ lat, lng, accuracy }) }),
 
+  // Update own face descriptor (face enrollment from Profile)
+  updateFace: (faceDescriptor: number[]) =>
+    request('/guards/me/face', { method: 'PATCH', body: JSON.stringify({ faceDescriptor }) }),
+
   // Face checks
   getPendingFaceChecks: (guardId: number) => request(`/face-checks/pending/${guardId}`),
 

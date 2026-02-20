@@ -2,7 +2,10 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, 'data', 'blackbelt.db');
+// DATA_DIR env var lets Railway (or any host) point to a persistent volume mount.
+// Default: ./data relative to this file (used in local dev and Docker without a volume).
+const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
+const DB_PATH = path.join(dataDir, 'blackbelt.db');
 const db = new Database(DB_PATH);
 
 // Enable WAL mode for better concurrent read performance
