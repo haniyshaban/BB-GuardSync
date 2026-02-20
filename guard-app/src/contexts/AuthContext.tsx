@@ -15,6 +15,7 @@ interface GuardUser {
   daily_rate: number;
   employee_id?: string;
   approval_status: string;
+  hasFaceDescriptor?: boolean;
 }
 
 interface AuthContextType {

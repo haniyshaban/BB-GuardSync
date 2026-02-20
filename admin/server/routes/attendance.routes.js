@@ -5,11 +5,20 @@ const { authMiddleware, requireRole } = require('../auth');
 
 const router = express.Router();
 
+// Face descriptor euclidean distance (shared with face-checks.routes.js)
+function faceDistance(d1, d2) {
+  if (!d1 || !d2 || d1.length !== d2.length) return Infinity;
+  let sum = 0;
+  for (let i = 0; i < d1.length; i++) sum += (d1[i] - d2[i]) ** 2;
+  return Math.sqrt(sum);
+}
+const FACE_MATCH_THRESHOLD = 0.6;
+
 // POST /api/attendance/clock-in
 router.post('/clock-in', authMiddleware, (req, res) => {
   try {
     const guardId = req.user.role === 'guard' ? req.user.id : req.body.guardId;
-    const { lat, lng } = req.body;
+    const { lat, lng, faceDescriptor } = req.body;
 
     const guard = db.prepare('SELECT * FROM guards WHERE id = ?').get(guardId);
     if (!guard) return res.status(404).json({ success: false, error: 'Guard not found' });
@@ -18,6 +27,19 @@ router.post('/clock-in', authMiddleware, (req, res) => {
     }
     if (guard.clocked_in) {
       return res.status(400).json({ success: false, error: 'Already clocked in' });
+    }
+
+    // Face verification: if guard has enrolled face, verify before clocking in
+    if (guard.face_descriptor) {
+      if (!faceDescriptor || !Array.isArray(faceDescriptor) || faceDescriptor.length === 0) {
+        return res.status(400).json({ success: false, error: 'Face verification required to clock in' });
+      }
+      const storedDescriptor = JSON.parse(guard.face_descriptor);
+      const distance = faceDistance(storedDescriptor, faceDescriptor);
+      console.log(`[ClockIn] Guard ${guardId} face distance=${distance.toFixed(3)}`);
+      if (distance > FACE_MATCH_THRESHOLD) {
+        return res.status(401).json({ success: false, error: 'Face verification failed. Please try again in better lighting.' });
+      }
     }
 
     const now = new Date();

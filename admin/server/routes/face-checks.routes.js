@@ -72,8 +72,9 @@ router.post('/:checkId/result', authMiddleware, (req, res) => {
 
     let passed;
     if (!storedDescriptor) {
-      // Guard enrolled without face scan — auto-pass (legacy/seeded guards)
-      passed = true;
+      // Guard has no enrolled face — fail the check (require proper enrollment)
+      passed = false;
+      console.log(`[FaceCheck] Guard ${check.guard_id} has no enrolled face — auto-fail`);
     } else if (!faceDescriptor || !Array.isArray(faceDescriptor)) {
       return res.status(400).json({ success: false, error: 'No face descriptor provided' });
     } else {

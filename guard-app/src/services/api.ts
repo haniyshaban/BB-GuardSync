@@ -51,8 +51,8 @@ export const guardApi = {
     request(`/org/validate/${encodeURIComponent(code)}`),
 
   // Attendance
-  clockIn: (lat?: number, lng?: number) =>
-    request('/attendance/clock-in', { method: 'POST', body: JSON.stringify({ lat, lng }) }),
+  clockIn: (lat?: number, lng?: number, faceDescriptor?: number[]) =>
+    request('/attendance/clock-in', { method: 'POST', body: JSON.stringify({ lat, lng, faceDescriptor }) }),
 
   clockOut: (lat?: number, lng?: number) =>
     request('/attendance/clock-out', { method: 'POST', body: JSON.stringify({ lat, lng }) }),

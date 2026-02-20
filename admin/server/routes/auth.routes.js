@@ -97,8 +97,13 @@ router.get('/me', require('../auth').authMiddleware, (req, res) => {
       return res.status(404).json({ success: false, error: 'Guard not found' });
     }
 
-    const { password: _, ...guardData } = guard;
-    res.json({ success: true, data: guardData });
+    const { password: _, face_descriptor, site_name, shift_label, ...guardData } = guard;
+    res.json({ success: true, data: {
+      ...guardData,
+      siteName: site_name,
+      shiftLabel: shift_label,
+      hasFaceDescriptor: !!face_descriptor,
+    }});
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to get profile' });
   }

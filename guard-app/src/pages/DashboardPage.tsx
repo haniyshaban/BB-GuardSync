@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { guardApi } from '@/services/api';
 import { startLocationTracking, stopLocationTracking } from '@/services/LocationService';
@@ -16,6 +16,10 @@ export default function DashboardPage() {
   const [faceCheckOpen, setFaceCheckOpen] = useState(false);
   const [faceCheckResult, setFaceCheckResult] = useState<'passed' | 'failed' | null>(null);
   const [activeFaceCheckId, setActiveFaceCheckId] = useState<number | null>(null);
+  const [clockInFaceOpen, setClockInFaceOpen] = useState(false);
+  const [clockInSuccess, setClockInSuccess] = useState(false);
+  // Track which face check IDs have already been shown to prevent re-triggering on tab switch
+  const shownFaceCheckIds = useRef<Set<number>>(new Set());
 
   // Refresh user data on mount
   useEffect(() => {
@@ -35,8 +39,16 @@ export default function DashboardPage() {
     if (clockedIn && user) {
       startLocationTracking(30); // Every 30 minutes
       startFaceCheckPolling(user.id, (checks) => {
-        setFaceCheckDue(checks);
-        setFaceCheckOpen(true);
+        // Only show checks that haven't been shown before (prevents re-trigger on tab switch)
+        const newChecks = checks.filter(c => !shownFaceCheckIds.current.has(c.id));
+        if (newChecks.length > 0) {
+          newChecks.forEach(c => shownFaceCheckIds.current.add(c.id));
+          setFaceCheckDue(prev => {
+            const existingIds = new Set(prev.map(c => c.id));
+            return [...prev.filter(c => c), ...newChecks.filter(c => !existingIds.has(c.id))];
+          });
+          setFaceCheckOpen(true);
+        }
       });
     } else {
       stopLocationTracking();
@@ -49,7 +61,22 @@ export default function DashboardPage() {
     };
   }, [clockedIn, user?.id]);
 
-  const handleClockIn = async () => {
+  const handleClockInButtonClick = () => {
+    setError('');
+    if (user?.hasFaceDescriptor) {
+      // Guard has enrolled face — require face scan before clocking in
+      setClockInFaceOpen(true);
+    } else {
+      handleClockIn();
+    }
+  };
+
+  const handleClockInFaceCaptured = async (descriptor: number[]) => {
+    setClockInFaceOpen(false);
+    await handleClockIn(descriptor);
+  };
+
+  const handleClockIn = async (faceDescriptor?: number[]) => {
     setClockLoading(true);
     setError('');
     try {
@@ -63,10 +90,11 @@ export default function DashboardPage() {
         lng = pos.coords.longitude;
       } catch { /* Location optional */ }
 
-      const res = await guardApi.clockIn(lat, lng);
+      const res = await guardApi.clockIn(lat, lng, faceDescriptor);
       setClockedIn(true);
       setClockInTime(res.data.clockIn);
       updateUser({ clocked_in: true, clock_in_time: res.data.clockIn });
+      if (faceDescriptor) setClockInSuccess(true);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -137,6 +165,16 @@ export default function DashboardPage() {
 
   return (
     <div className="px-4 pt-6 safe-top">
+      {/* Clock-In Face Capture Overlay */}
+      {clockInFaceOpen && (
+        <FaceCapture
+          title="Clock-In Verification"
+          instruction="Verify your identity to clock in for your shift"
+          onCapture={handleClockInFaceCaptured}
+          onCancel={() => setClockInFaceOpen(false)}
+        />
+      )}
+
       {/* Face Capture Overlay */}
       {faceCheckOpen && (
         <FaceCapture
@@ -145,6 +183,18 @@ export default function DashboardPage() {
           onCapture={handleFaceCaptured}
           onCancel={() => { setFaceCheckOpen(false); setActiveFaceCheckId(null); }}
         />
+      )}
+
+      {/* Clock-In Success Toast */}
+      {clockInSuccess && (
+        <div className="fixed top-4 left-4 right-4 z-40 rounded-xl p-4 flex items-center gap-3 shadow-lg bg-green-600 text-white">
+          <CheckCircle className="w-6 h-6 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="font-semibold">Clocked In Successfully</p>
+            <p className="text-sm opacity-90">Identity verified. Have a safe shift!</p>
+          </div>
+          <button onClick={() => setClockInSuccess(false)} className="opacity-70 hover:opacity-100"><XCircle className="w-5 h-5" /></button>
+        </div>
       )}
 
       {/* Face Check Result Toast */}
@@ -191,7 +241,7 @@ export default function DashboardPage() {
 
         {/* Clock In/Out Button */}
         <button
-          onClick={clockedIn ? handleClockOut : handleClockIn}
+          onClick={clockedIn ? handleClockOut : handleClockInButtonClick}
           disabled={clockLoading}
           className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 transition-colors disabled:opacity-50 ${
             clockedIn
