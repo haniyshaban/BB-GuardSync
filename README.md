@@ -80,6 +80,31 @@ cd guard-app && npm run dev                # Guard app on :5174
 cd staff-app && npm run dev                # Staff app on :5175
 ```
 
+## Default Login Credentials
+
+After running the seed script, the following accounts are available:
+
+### Admin Console
+- **Email:** `admin@blackbelt.app`
+- **Password:** `admin123`
+
+### Staff App
+- **Whitefield:** `staff.whitefield@blackbelt.app` / `staff123`
+- **Koramangala:** `staff.koramangala@blackbelt.app` / `staff123`
+- **Electronic City:** `staff.ecity@blackbelt.app` / `staff123`
+
+### Guard App
+Guards can log in using their **phone number** or **email** with password `guard123`
+
+Example guard accounts:
+| Name | Phone | Email | Password |
+|------|-------|-------|----------|
+| Rajesh Kumar | `9100000001` | `rajesh.k@guard.bb` | `guard123` |
+| Sunil Yadav | `9100000002` | `sunil.y@guard.bb` | `guard123` |
+| Vikram Singh | `9100000003` | `vikram.s@guard.bb` | `guard123` |
+
+> **Note:** These are development credentials. Change them in production via the `.env` file.
+
 ## Removed Features (vs full GuardSync)
 - ❌ Live map / real-time guard tracking map
 - ❌ Geofencing (polygon & radius)
