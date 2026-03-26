@@ -5,6 +5,7 @@ import EnrollmentPage from './pages/EnrollmentPage';
 import DashboardPage from './pages/DashboardPage';
 import ProfilePage from './pages/ProfilePage';
 import PayslipPage from './pages/PayslipPage';
+import DeleteAccountPage from './pages/DeleteAccountPage';
 import BottomNav from './components/BottomNav';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/payslip" element={<ProtectedRoute><PayslipPage /></ProtectedRoute>} />
+          <Route path="/delete-account" element={<DeleteAccountPage />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </div>

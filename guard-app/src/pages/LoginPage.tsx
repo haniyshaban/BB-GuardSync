@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Eye, EyeOff } from 'lucide-react';
 
@@ -11,9 +11,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = (location.state as any)?.returnTo || '/';
 
   if (isAuthenticated) {
-    navigate('/');
+    navigate(returnTo);
     return null;
   }
 
@@ -23,7 +25,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(identifier, password);
-      navigate('/');
+      navigate(returnTo);
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
