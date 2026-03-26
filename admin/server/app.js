@@ -11,10 +11,19 @@ const app = express();
 app.use(helmet());
 
 // CORS: restrict to known origins via ALLOWED_ORIGINS env var (comma-separated).
-// Falls back to localhost dev origins if the env var is not set.
+// Falls back to dev + known production origins if the env var is not set.
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'capacitor://localhost', 'https://localhost'];
+  : [
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://localhost:5175',
+      'capacitor://localhost',
+      'https://localhost',
+      'https://bb-guard-sync.vercel.app',
+      'https://bb-guardsync-admin.vercel.app',
+      'https://bb-staff-sync.vercel.app',
+    ];
 
 app.use(cors({
   origin: (origin, callback) => {
