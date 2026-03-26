@@ -3,11 +3,18 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { authMiddleware, requireRole } = require('../auth');
+const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
 
+const enrollLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  message: { success: false, error: 'Too many enrollment attempts. Please try again later.' }
+});
+
 // POST /api/guards/enroll - Guard self-enrollment (public)
-router.post('/enroll', (req, res) => {
+router.post('/enroll', enrollLimiter, (req, res) => {
   try {
     const { name, phone, email, password, photoUrl, faceDescriptor, orgCode } = req.body;
 
@@ -278,6 +285,37 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
+
+// DELETE /api/guards/me/account - Guard requests deletion of their own account & data
+router.delete('/me/account', authMiddleware, (req, res) => {
+  try {
+    if (req.user.role !== 'guard') {
+      return res.status(403).json({ success: false, error: 'Guard only endpoint' });
+    }
+
+    const guardId = req.user.id;
+    const guard = db.prepare('SELECT id FROM guards WHERE id = ?').get(guardId);
+    if (!guard) {
+      return res.status(404).json({ success: false, error: 'Guard not found' });
+    }
+
+    // Delete all related data in a transaction
+    const deleteAll = db.transaction(() => {
+      db.prepare('DELETE FROM guard_locations WHERE guard_id = ?').run(guardId);
+      db.prepare('DELETE FROM guard_locations_archive WHERE guard_id = ?').run(guardId);
+      db.prepare('DELETE FROM face_checks WHERE guard_id = ?').run(guardId);
+      db.prepare('DELETE FROM guard_attendance WHERE guard_id = ?').run(guardId);
+      db.prepare('DELETE FROM payroll WHERE guard_id = ?').run(guardId);
+      db.prepare('DELETE FROM guards WHERE id = ?').run(guardId);
+    });
+    deleteAll();
+
+    res.json({ success: true, message: 'Account and all associated data deleted successfully' });
+  } catch (err) {
+    console.error('Account deletion error:', err);
+    res.status(500).json({ success: false, error: 'Account deletion failed' });
+  }
+});
 
 // PATCH /api/guards/me/face - Authenticated guard enrolls/updates their own face descriptor
 router.patch('/me/face', authMiddleware, (req, res) => {

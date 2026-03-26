@@ -78,4 +78,8 @@ export const guardApi = {
 
   // Config
   getConfig: () => request('/config'),
+
+  // Account
+  deleteAccount: () =>
+    request('/guards/me/account', { method: 'DELETE' }),
 };

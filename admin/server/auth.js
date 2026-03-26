@@ -4,6 +4,11 @@ const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'blackbelt-guardsync-secret-key-change-in-production';
 const JWT_EXPIRES_IN = '7d';
 
+if (!process.env.JWT_SECRET) {
+  console.warn('\n  ⚠️  WARNING: JWT_SECRET env var is not set. Using insecure default secret.');
+  console.warn('     Set JWT_SECRET to a long random string in production.\n');
+}
+
 function generateToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }

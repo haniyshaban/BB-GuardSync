@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { guardApi } from '@/services/api';
 import FaceCapture from '@/components/FaceCapture';
+import BiometricConsent from '@/components/BiometricConsent';
 import { ArrowLeft, Eye, EyeOff, CheckCircle, Building2, ScanFace } from 'lucide-react';
 
 export default function EnrollmentPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [step, setStep] = useState<'form' | 'face' | 'success'>('form');
+  const [step, setStep] = useState<'form' | 'consent' | 'face' | 'success'>('form');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
@@ -93,8 +94,8 @@ export default function EnrollmentPage() {
       }
     }
 
-    // Proceed to face scan step
-    setStep('face');
+    // Proceed to biometric consent step
+    setStep('consent');
   };
 
   const handleFaceCaptured = async (descriptor: number[]) => {
@@ -119,6 +120,15 @@ export default function EnrollmentPage() {
       setLoading(false);
     }
   };
+
+  if (step === 'consent') {
+    return (
+      <BiometricConsent
+        onAccept={() => setStep('face')}
+        onDecline={() => setStep('form')}
+      />
+    );
+  }
 
   if (step === 'face') {
     return (

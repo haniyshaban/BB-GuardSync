@@ -9,8 +9,20 @@ const app = express();
 
 // Security & parsing
 app.use(helmet());
+
+// CORS: restrict to known origins via ALLOWED_ORIGINS env var (comma-separated).
+// Falls back to localhost dev origins if the env var is not set.
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'capacitor://localhost', 'https://localhost'];
+
 app.use(cors({
-  origin: true, // allow all origins
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g. mobile apps, Capacitor WebView, curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin '${origin}' not allowed`));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],

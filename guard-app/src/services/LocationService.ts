@@ -30,7 +30,7 @@ async function sendLocation() {
     // Try Capacitor Geolocation first, fallback to browser API
     let lat: number, lng: number, accuracy: number | undefined;
 
-    if ('Geolocation' in window.navigator) {
+    if ('geolocation' in navigator) {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,

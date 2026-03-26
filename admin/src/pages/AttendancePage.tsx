@@ -35,11 +35,7 @@ export default function AttendancePage() {
       if (dateTo) params.set('dateTo', dateTo);
       if (siteId) params.set('siteId', siteId);
 
-      const token = localStorage.getItem('bb_token');
-      const res = await fetch(`/api/attendance/export?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const csv = await res.text();
+      const csv = await api<string>(`/attendance/export?${params}`);
       downloadCSV(csv, `attendance-${dateFrom}-to-${dateTo}.csv`);
     } catch (err) {
       alert('Export failed');
