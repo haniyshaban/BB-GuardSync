@@ -21,8 +21,8 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
       'capacitor://localhost',
       'https://localhost',
       'https://bb-guard-sync.vercel.app',
-      'https://bb-guardsync-admin.vercel.app',
-      'https://bb-staff-sync.vercel.app',
+      'https://bb-guard-sync-admin.vercel.app',
+      'https://bb-guard-sync-orcin.vercel.app',
     ];
 
 app.use(cors({
