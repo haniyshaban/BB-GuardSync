@@ -79,7 +79,7 @@ function runMonitoring() {
             if (outMins >= offsiteGraceMins) {
               if (createAlert({
                 orgId: g.org_id, guardId: g.id, siteId: g.site_id, type: 'offsite', severity: 'high',
-                message: `${g.name} is off-site — ${Math.round(dist)} m from ${g.site_name || 'post'} for ${Math.round(outMins)} min`,
+                message: `${g.name} is out of location — ${Math.round(dist)} m from ${g.site_name || 'post'} for ${Math.round(outMins)} min`,
                 meta: { distance: Math.round(dist), radius, offsiteSince: g.offsite_since },
               })) offsiteAlerts++;
             }

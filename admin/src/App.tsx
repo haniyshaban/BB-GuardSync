@@ -2,7 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import DashboardLayout from './components/layout/DashboardLayout';
 import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
+import LiveDashboardPage from './pages/LiveDashboardPage';
 import GuardsPage from './pages/GuardsPage';
 import GuardDetailPage from './pages/GuardDetailPage';
 import SitesPage from './pages/SitesPage';
@@ -10,8 +10,6 @@ import ManageSitePage from './pages/ManageSitePage';
 import AttendancePage from './pages/AttendancePage';
 import PayrollPage from './pages/PayrollPage';
 import SettingsPage from './pages/SettingsPage';
-import CommandCentrePage from './pages/CommandCentrePage';
-import LiveMapPage from './pages/LiveMapPage';
 import AlertsPage from './pages/AlertsPage';
 import OvertimePage from './pages/OvertimePage';
 import AssetsPage from './pages/AssetsPage';
@@ -35,9 +33,10 @@ export default function App() {
           <ProtectedRoute>
             <DashboardLayout>
               <Routes>
-                <Route path="/" element={<DashboardPage />} />
-                <Route path="/command" element={<CommandCentrePage />} />
-                <Route path="/map" element={<LiveMapPage />} />
+                <Route path="/" element={<LiveDashboardPage />} />
+                {/* Old URLs from before the dashboard merge */}
+                <Route path="/command" element={<Navigate to="/" replace />} />
+                <Route path="/map" element={<Navigate to="/" replace />} />
                 <Route path="/guards" element={<GuardsPage />} />
                 <Route path="/guards/:id" element={<GuardDetailPage />} />
                 <Route path="/sites" element={<SitesPage />} />
