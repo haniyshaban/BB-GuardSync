@@ -248,7 +248,7 @@ db.exec(`
     org_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
     guard_id INTEGER REFERENCES guards(id) ON DELETE SET NULL,
     site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
-    type TEXT NOT NULL CHECK(type IN ('sleep','shortage','sos','incident','overtime','face_fail','low_battery','offline')),
+    type TEXT NOT NULL CHECK(type IN ('sleep','shortage','sos','incident','overtime','face_fail','low_battery','offline','offsite')),
     severity TEXT NOT NULL DEFAULT 'medium' CHECK(severity IN ('low','medium','high','critical')),
     message TEXT NOT NULL,
     meta TEXT,
@@ -358,6 +358,16 @@ addColumn('system_config', 'night_shift_start', "TEXT NOT NULL DEFAULT '22:00'")
 addColumn('system_config', 'night_shift_end', "TEXT NOT NULL DEFAULT '06:00'");
 addColumn('system_config', 'sleep_inactivity_mins', 'INTEGER NOT NULL DEFAULT 45');
 addColumn('system_config', 'low_battery_threshold', 'INTEGER NOT NULL DEFAULT 15');
+addColumn('system_config', 'offsite_grace_mins', 'INTEGER NOT NULL DEFAULT 10');
+
+// Geofencing: geotag a site and define an allowed radius; guards outside it too long are "off-site".
+addColumn('sites', 'lat', 'REAL');
+addColumn('sites', 'lng', 'REAL');
+addColumn('sites', 'geofence_radius_m', 'INTEGER NOT NULL DEFAULT 150');
+addColumn('sites', 'geofence_enabled', 'INTEGER NOT NULL DEFAULT 0');
+
+// When a clocked-in guard first left their site geofence (cleared when back inside).
+addColumn('guards', 'offsite_since', 'TEXT');
 
 // Rebuild staff CHECK to permit the 'client' role on pre-existing databases.
 // Uses user_version as a one-shot migration guard.
@@ -390,6 +400,38 @@ if (USER_VERSION < 1) {
     rebuild();
   }
   db.pragma('user_version = 1');
+}
+
+// v2: allow the 'offsite' alert type on pre-existing databases (rebuild alerts CHECK).
+if (db.pragma('user_version', { simple: true }) < 2) {
+  const alertsSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='alerts'").get();
+  if (alertsSql && alertsSql.sql && !alertsSql.sql.includes("'offsite'")) {
+    const rebuild = db.transaction(() => {
+      db.exec(`
+        CREATE TABLE alerts_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          org_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
+          guard_id INTEGER REFERENCES guards(id) ON DELETE SET NULL,
+          site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
+          type TEXT NOT NULL CHECK(type IN ('sleep','shortage','sos','incident','overtime','face_fail','low_battery','offline','offsite')),
+          severity TEXT NOT NULL DEFAULT 'medium' CHECK(severity IN ('low','medium','high','critical')),
+          message TEXT NOT NULL,
+          meta TEXT,
+          status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','acknowledged','resolved')),
+          acknowledged_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+          acknowledged_at TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO alerts_new SELECT * FROM alerts;
+        DROP TABLE alerts;
+        ALTER TABLE alerts_new RENAME TO alerts;
+        CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status);
+        CREATE INDEX IF NOT EXISTS idx_alerts_type ON alerts(type);
+      `);
+    });
+    rebuild();
+  }
+  db.pragma('user_version = 2');
 }
 
 module.exports = db;

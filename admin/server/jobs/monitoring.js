@@ -17,19 +17,28 @@ function isWithinWindow(start, end, now = new Date()) {
 
 function runMonitoring() {
   try {
+    // Keep the customer-demo guards "live" (fresh GPS pings) between boots.
+    if (process.env.SEED_DEMO_HRBR) {
+      try { require('../seed-demo-hrbr').refreshPings(); } catch (e) { /* non-fatal */ }
+    }
+
     const cfg = db.prepare('SELECT * FROM system_config WHERE id = 1').get() || {};
     const inactivityMins = cfg.sleep_inactivity_mins || 45;
     const lowBattery = cfg.low_battery_threshold || 15;
     const offlineMins = (cfg.location_update_interval_mins || 30) * 2;
+    const offsiteGraceMins = cfg.offsite_grace_mins || 10;
     const nightStart = cfg.night_shift_start || '22:00';
     const nightEnd = cfg.night_shift_end || '06:00';
     const isNight = isWithinWindow(nightStart, nightEnd);
 
-    const guards = db.prepare(
-      "SELECT id, name, org_id, site_id FROM guards WHERE clocked_in = 1 AND approval_status = 'active'"
-    ).all();
+    const guards = db.prepare(`
+      SELECT g.id, g.name, g.org_id, g.site_id, g.offsite_since,
+             s.lat AS site_lat, s.lng AS site_lng, s.geofence_radius_m, s.geofence_enabled, s.name AS site_name
+      FROM guards g LEFT JOIN sites s ON s.id = g.site_id
+      WHERE g.clocked_in = 1 AND g.approval_status = 'active'
+    `).all();
 
-    let sleepAlerts = 0, batteryAlerts = 0, offlineAlerts = 0;
+    let sleepAlerts = 0, batteryAlerts = 0, offlineAlerts = 0, offsiteAlerts = 0;
 
     for (const g of guards) {
       const lastLoc = db.prepare(
@@ -55,6 +64,30 @@ function runMonitoring() {
           message: `${g.name} has not reported location in over ${Math.round(offlineMins)} min`,
           meta: { lastPing: lastLoc?.timestamp || null },
         })) offlineAlerts++;
+      }
+
+      // --- Geofence breach (off-site) ---
+      if (g.geofence_enabled && g.site_lat != null && lastLoc && lastLoc.lat != null) {
+        const dist = haversine(lastLoc.lat, lastLoc.lng, g.site_lat, g.site_lng);
+        const radius = g.geofence_radius_m || 150;
+        if (dist > radius) {
+          // Outside the fence: start the clock if not already running.
+          if (!g.offsite_since) {
+            db.prepare("UPDATE guards SET offsite_since = datetime('now') WHERE id = ?").run(g.id);
+          } else {
+            const outMins = (Date.now() - new Date(g.offsite_since + 'Z').getTime()) / 60000;
+            if (outMins >= offsiteGraceMins) {
+              if (createAlert({
+                orgId: g.org_id, guardId: g.id, siteId: g.site_id, type: 'offsite', severity: 'high',
+                message: `${g.name} is off-site — ${Math.round(dist)} m from ${g.site_name || 'post'} for ${Math.round(outMins)} min`,
+                meta: { distance: Math.round(dist), radius, offsiteSince: g.offsite_since },
+              })) offsiteAlerts++;
+            }
+          }
+        } else if (g.offsite_since) {
+          // Back inside the fence: clear the breach timer.
+          db.prepare('UPDATE guards SET offsite_since = NULL WHERE id = ?').run(g.id);
+        }
       }
 
       // --- AI Sleep Alert (night shift inactivity) ---
@@ -88,11 +121,11 @@ function runMonitoring() {
       }
     }
 
-    const total = sleepAlerts + batteryAlerts + offlineAlerts;
+    const total = sleepAlerts + batteryAlerts + offlineAlerts + offsiteAlerts;
     if (total > 0) {
-      console.log(`[Monitoring] alerts created — sleep:${sleepAlerts} battery:${batteryAlerts} offline:${offlineAlerts}`);
+      console.log(`[Monitoring] alerts created — sleep:${sleepAlerts} battery:${batteryAlerts} offline:${offlineAlerts} offsite:${offsiteAlerts}`);
     }
-    return { sleepAlerts, batteryAlerts, offlineAlerts };
+    return { sleepAlerts, batteryAlerts, offlineAlerts, offsiteAlerts };
   } catch (err) {
     console.error('[Monitoring] Error:', err.message);
     return null;

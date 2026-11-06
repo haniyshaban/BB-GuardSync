@@ -91,6 +91,19 @@ function seedDemoData() {
 seedDemoData();
 seedDefaultAdmin();
 
+// Optional customer-demo dataset (Blackbelt HRBR Office + geofencing showcase).
+// Enabled by setting SEED_DEMO_HRBR=1. Idempotent; refreshed live by the monitoring job.
+if (process.env.SEED_DEMO_HRBR) {
+  try {
+    const demo = require('./seed-demo-hrbr');
+    demo.ensureDemo();
+    demo.refreshPings();
+    console.log('  ✓ HRBR demo data loaded (SEED_DEMO_HRBR)');
+  } catch (e) {
+    console.error('HRBR demo seed error:', e.message);
+  }
+}
+
 // ============ RANDOM FACE CHECK SCHEDULER ============
 // Every 30 minutes: give each clocked-in guard a ~40% chance of receiving a face check
 function scheduleRandomFaceChecks() {
