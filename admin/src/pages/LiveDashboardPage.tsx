@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, formatTime, cn } from '@/lib/utils';
 import LiveMap, { STATUS_COLORS, guardStatusLabel, type Focus, type MapGuard } from '@/components/LiveMap';
@@ -8,7 +8,8 @@ import { Users, ShieldCheck, MapPinOff, Moon, Bell, Siren, BatteryLow, ChevronRi
 type Filter = 'all' | 'out' | 'inactive';
 
 export default function LiveDashboardPage() {
-  const [siteId, setSiteId] = useState('');
+  const [params] = useSearchParams();
+  const [siteId, setSiteId] = useState(params.get('site') || '');
   const [filter, setFilter] = useState<Filter>('all');
   const [tab, setTab] = useState<'guards' | 'sites'>('guards');
   const [focus, setFocus] = useState<Focus>(null);
@@ -35,8 +36,12 @@ export default function LiveDashboardPage() {
   );
   const fences = useMemo(
     () => sites
-      .filter(s => s.geofence_enabled && s.lat != null && (!siteId || String(s.site_id) === siteId))
-      .map(s => ({ id: s.site_id, name: s.site_name, lat: s.lat, lng: s.lng, radius: s.geofence_radius_m || 150 })),
+      .filter(s => s.geofence_enabled && (!siteId || String(s.site_id) === siteId))
+      .map(s => ({
+        id: s.site_id, name: s.site_name, lat: s.lat, lng: s.lng, radius: s.geofence_radius_m || 150,
+        points: s.geofence_type === 'polygon' ? (s.geofence_polygon || []).map((p: any) => [p.lat, p.lng] as [number, number]) : undefined,
+      }))
+      .filter(f => (f.points && f.points.length >= 3) || (f.lat != null && f.lng != null)),
     [sites, siteId],
   );
 
@@ -200,7 +205,7 @@ export default function LiveDashboardPage() {
                       <span className={s.shortage ? 'text-red-600 font-medium' : 'text-gray-900'}>{s.onDuty}{s.required ? ` / ${s.required}` : ''}</span>
                       {s.shortage > 0 && <span className="ml-2 text-xs text-red-600">{s.shortage} short</span>}
                     </td>
-                    <td className="px-4 py-2.5 text-gray-600">{s.geofence_enabled ? `${s.geofence_radius_m || 150} m` : <span className="text-gray-400">Not set</span>}</td>
+                    <td className="px-4 py-2.5 text-gray-600">{s.geofence_enabled ? (s.geofence_type === 'polygon' ? 'Custom area' : `${s.geofence_radius_m || 150} m`) : <span className="text-amber-600">Not set</span>}</td>
                   </tr>
                 ))}
               </tbody>

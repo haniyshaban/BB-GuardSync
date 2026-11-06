@@ -1,7 +1,8 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/utils';
-import { ArrowLeft, Plus, Trash2, AlertTriangle, Search, ChevronDown, Clock, Pencil, MapPin } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, AlertTriangle, Search, ChevronDown, Clock, Pencil } from 'lucide-react';
+import { GeofenceEditor, PatrolCheckpointsEditor } from '@/components/SiteMapEditors';
 import { useState, useRef, useEffect } from 'react';
 
 export default function ManageSitePage() {
@@ -17,6 +18,16 @@ export default function ManageSitePage() {
     queryKey: ['site', id],
     queryFn: () => api(`/sites/${id}`),
   });
+
+  // Latest positions of on-duty guards at this site, shown on the geofence map for context.
+  const { data: positionsRes } = useQuery({
+    queryKey: ['site-positions', id],
+    queryFn: () => api('/locations/latest/all'),
+    refetchInterval: 30000,
+  });
+  const sitePositions = (positionsRes?.data || [])
+    .filter((l: any) => String(l.site_id) === String(id))
+    .map((l: any) => ({ id: l.guard_id, name: l.guard_name, lat: l.lat, lng: l.lng, clocked_in: 1 }));
 
   const { data: guardsRes } = useQuery({
     queryKey: ['site-guards', id],
@@ -118,7 +129,10 @@ export default function ManageSitePage() {
       </div>
 
       {/* Geofence */}
-      <GeofenceCard site={site} siteId={id!} />
+      <GeofenceEditor key={`fence-${site.id}`} site={site} siteId={id!} guards={sitePositions} />
+
+      {/* Patrol route */}
+      <PatrolCheckpointsEditor site={site} siteId={id!} />
 
       {/* Shifts */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -318,67 +332,6 @@ export default function ManageSitePage() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-function GeofenceCard({ site, siteId }: { site: any; siteId: string }) {
-  const qc = useQueryClient();
-  const [form, setForm] = useState({
-    lat: site.lat ?? '',
-    lng: site.lng ?? '',
-    geofenceRadiusM: site.geofence_radius_m ?? 150,
-    geofenceEnabled: !!site.geofence_enabled,
-  });
-  const [saved, setSaved] = useState(false);
-
-  const saveMut = useMutation({
-    mutationFn: () => api(`/sites/${siteId}`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        lat: form.lat === '' ? null : Number(form.lat),
-        lng: form.lng === '' ? null : Number(form.lng),
-        geofenceRadiusM: Number(form.geofenceRadiusM),
-        geofenceEnabled: form.geofenceEnabled,
-      }),
-    }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['site', siteId] }); setSaved(true); setTimeout(() => setSaved(false), 2000); },
-    onError: (e: any) => alert(e.message),
-  });
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-1">
-        <h2 className="text-lg font-semibold flex items-center gap-2"><MapPin className="w-5 h-5" /> Geofencing</h2>
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input type="checkbox" checked={form.geofenceEnabled} onChange={e => setForm({ ...form, geofenceEnabled: e.target.checked })} />
-          Enabled
-        </label>
-      </div>
-      <p className="text-sm text-gray-500 mb-4">Geotag this site and set an allowed radius. A clocked-in guard outside it beyond the grace period is flagged <strong>Out of Location</strong>.</p>
-      <div className="grid sm:grid-cols-3 gap-4">
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Latitude</label>
-          <input value={form.lat} onChange={e => setForm({ ...form, lat: e.target.value })} placeholder="13.01160" className="input" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Longitude</label>
-          <input value={form.lng} onChange={e => setForm({ ...form, lng: e.target.value })} placeholder="77.64100" className="input" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Radius (m)</label>
-          <input type="number" min={25} value={form.geofenceRadiusM} onChange={e => setForm({ ...form, geofenceRadiusM: Number(e.target.value) })} className="input" />
-        </div>
-      </div>
-      <div className="flex items-center gap-3 mt-4">
-        <button onClick={() => saveMut.mutate()} disabled={saveMut.isPending} className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">
-          {saveMut.isPending ? 'Saving…' : 'Save geofence'}
-        </button>
-        {saved && <span className="text-sm text-green-600">✓ Saved</span>}
-        {form.lat !== '' && form.lng !== '' && (
-          <a href={`https://www.openstreetmap.org/?mlat=${form.lat}&mlon=${form.lng}#map=17/${form.lat}/${form.lng}`} target="_blank" rel="noreferrer" className="text-sm text-blue-600 underline ml-auto">preview on map</a>
-        )}
-      </div>
     </div>
   );
 }

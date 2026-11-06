@@ -369,6 +369,40 @@ addColumn('sites', 'geofence_enabled', 'INTEGER NOT NULL DEFAULT 0');
 // When a clocked-in guard first left their site geofence (cleared when back inside).
 addColumn('guards', 'offsite_since', 'TEXT');
 
+// Fence shape: 'radius' (centre + geofence_radius_m) or 'polygon' (site_geofence_points).
+addColumn('sites', 'geofence_type', "TEXT NOT NULL DEFAULT 'radius'");
+// Whether the guard was inside the site fence at clock-in (NULL = no fence configured).
+addColumn('guard_attendance', 'within_geofence', 'INTEGER');
+
+db.exec(`
+  -- Polygon geofence vertices, in drawing order
+  CREATE TABLE IF NOT EXISTS site_geofence_points (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    point_order INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_site_geofence_points_site ON site_geofence_points(site_id);
+
+  -- Guard leave requests (applied in the guard app, decided by admin/staff)
+  CREATE TABLE IF NOT EXISTS leave_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guard_id INTEGER NOT NULL REFERENCES guards(id) ON DELETE CASCADE,
+    leave_type TEXT NOT NULL DEFAULT 'casual' CHECK(leave_type IN ('casual','sick','earned','other')),
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    reason TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','cancelled')),
+    reviewed_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+    reviewed_at TEXT,
+    review_note TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_leave_requests_guard ON leave_requests(guard_id);
+  CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON leave_requests(status);
+`);
+
 // Rebuild staff CHECK to permit the 'client' role on pre-existing databases.
 // Uses user_version as a one-shot migration guard.
 const USER_VERSION = db.pragma('user_version', { simple: true });

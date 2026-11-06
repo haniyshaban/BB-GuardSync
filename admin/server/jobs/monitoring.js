@@ -3,6 +3,7 @@
 // location movement and no completed face check within `sleep_inactivity_mins` is flagged.
 const db = require('../db');
 const { createAlert } = require('../lib/alerts');
+const { checkFence, polygonsBySite } = require('../lib/geo');
 
 // Is "HH:MM" now within a possibly-overnight [start, end) window?
 function isWithinWindow(start, end, now = new Date()) {
@@ -33,11 +34,12 @@ function runMonitoring() {
 
     const guards = db.prepare(`
       SELECT g.id, g.name, g.org_id, g.site_id, g.offsite_since,
-             s.lat AS site_lat, s.lng AS site_lng, s.geofence_radius_m, s.geofence_enabled, s.name AS site_name
+             s.lat AS site_lat, s.lng AS site_lng, s.geofence_radius_m, s.geofence_enabled, s.geofence_type, s.name AS site_name
       FROM guards g LEFT JOIN sites s ON s.id = g.site_id
       WHERE g.clocked_in = 1 AND g.approval_status = 'active'
     `).all();
 
+    const polys = polygonsBySite();
     let sleepAlerts = 0, batteryAlerts = 0, offlineAlerts = 0, offsiteAlerts = 0;
 
     for (const g of guards) {
@@ -66,28 +68,30 @@ function runMonitoring() {
         })) offlineAlerts++;
       }
 
-      // --- Geofence breach (off-site) ---
-      if (g.geofence_enabled && g.site_lat != null && lastLoc && lastLoc.lat != null) {
-        const dist = haversine(lastLoc.lat, lastLoc.lng, g.site_lat, g.site_lng);
-        const radius = g.geofence_radius_m || 150;
-        if (dist > radius) {
-          // Outside the fence: start the clock if not already running.
-          if (!g.offsite_since) {
-            db.prepare("UPDATE guards SET offsite_since = datetime('now') WHERE id = ?").run(g.id);
-          } else {
-            const outMins = (Date.now() - new Date(g.offsite_since + 'Z').getTime()) / 60000;
-            if (outMins >= offsiteGraceMins) {
-              if (createAlert({
-                orgId: g.org_id, guardId: g.id, siteId: g.site_id, type: 'offsite', severity: 'high',
-                message: `${g.name} is out of location — ${Math.round(dist)} m from ${g.site_name || 'post'} for ${Math.round(outMins)} min`,
-                meta: { distance: Math.round(dist), radius, offsiteSince: g.offsite_since },
-              })) offsiteAlerts++;
-            }
+      // --- Geofence breach (out of location): radius or polygon fence ---
+      const fence = lastLoc && g.site_id
+        ? checkFence(
+            { id: g.site_id, lat: g.site_lat, lng: g.site_lng, geofence_enabled: g.geofence_enabled,
+              geofence_type: g.geofence_type, geofence_radius_m: g.geofence_radius_m },
+            lastLoc.lat, lastLoc.lng, polys[g.site_id] || [])
+        : { active: false };
+      if (fence.active && !fence.inside) {
+        // Outside the fence: start the clock if not already running.
+        if (!g.offsite_since) {
+          db.prepare("UPDATE guards SET offsite_since = datetime('now') WHERE id = ?").run(g.id);
+        } else {
+          const outMins = (Date.now() - new Date(g.offsite_since + 'Z').getTime()) / 60000;
+          if (outMins >= offsiteGraceMins) {
+            if (createAlert({
+              orgId: g.org_id, guardId: g.id, siteId: g.site_id, type: 'offsite', severity: 'high',
+              message: `${g.name} is out of location — ${fence.distance} m from ${g.site_name || 'post'} for ${Math.round(outMins)} min`,
+              meta: { distance: fence.distance, fenceType: g.geofence_type, offsiteSince: g.offsite_since },
+            })) offsiteAlerts++;
           }
-        } else if (g.offsite_since) {
-          // Back inside the fence: clear the breach timer.
-          db.prepare('UPDATE guards SET offsite_since = NULL WHERE id = ?').run(g.id);
         }
+      } else if (g.offsite_since) {
+        // Back inside the fence (or fence removed): clear the breach timer.
+        db.prepare('UPDATE guards SET offsite_since = NULL WHERE id = ?').run(g.id);
       }
 
       // --- AI Sleep Alert (night shift inactivity) ---

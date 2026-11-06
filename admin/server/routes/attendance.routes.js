@@ -2,6 +2,7 @@
 const express = require('express');
 const db = require('../db');
 const { authMiddleware, requireRole } = require('../auth');
+const { checkFence } = require('../lib/geo');
 
 const router = express.Router();
 
@@ -46,10 +47,16 @@ router.post('/clock-in', authMiddleware, (req, res) => {
     const date = now.toISOString().split('T')[0];
     const clockIn = now.toISOString();
 
+    // Geofence check at clock-in. Clock-in is still allowed outside the fence
+    // (GPS can be off by a few metres); the result is recorded and shown to supervisors.
+    const site = guard.site_id ? db.prepare('SELECT * FROM sites WHERE id = ?').get(guard.site_id) : null;
+    const fence = checkFence(site, lat ?? null, lng ?? null);
+    const withinGeofence = fence.active ? (fence.inside ? 1 : 0) : null;
+
     // Create attendance record
     const result = db.prepare(
-      'INSERT INTO guard_attendance (guard_id, site_id, clock_in, date, lat, lng) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(guardId, guard.site_id, clockIn, date, lat || null, lng || null);
+      'INSERT INTO guard_attendance (guard_id, site_id, clock_in, date, lat, lng, within_geofence) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(guardId, guard.site_id, clockIn, date, lat ?? null, lng ?? null, withinGeofence);
 
     // Update guard status
     db.prepare("UPDATE guards SET clocked_in = 1, clock_in_time = ?, updated_at = datetime('now') WHERE id = ?")
@@ -69,8 +76,14 @@ router.post('/clock-in', authMiddleware, (req, res) => {
 
     res.json({
       success: true,
-      data: { attendanceId: result.lastInsertRowid, clockIn, date },
-      message: 'Clocked in successfully'
+      data: {
+        attendanceId: result.lastInsertRowid, clockIn, date,
+        withinGeofence: withinGeofence == null ? null : !!withinGeofence,
+        distanceFromSite: fence.distance,
+      },
+      message: withinGeofence === 0
+        ? `Clocked in, but you are ${fence.distance} m from your site. Your supervisor will see this.`
+        : 'Clocked in successfully'
     });
   } catch (err) {
     console.error('Clock-in error:', err);
@@ -169,7 +182,7 @@ router.get('/export', authMiddleware, requireRole('admin', 'staff'), (req, res) 
     const { dateFrom, dateTo, siteId, guardId } = req.query;
 
     let sql = `SELECT a.date, g.name as guard_name, g.employee_id, s.name as site_name, 
-               a.clock_in, a.clock_out, a.hours_worked
+               a.clock_in, a.clock_out, a.hours_worked, a.within_geofence
                FROM guard_attendance a 
                LEFT JOIN guards g ON a.guard_id = g.id 
                LEFT JOIN sites s ON a.site_id = s.id WHERE 1=1`;
@@ -190,9 +203,9 @@ router.get('/export', authMiddleware, requireRole('admin', 'staff'), (req, res) 
     const records = db.prepare(sql).all(...params);
 
     // Generate CSV
-    const headers = 'Date,Guard Name,Employee ID,Site,Clock In,Clock Out,Hours Worked\n';
+    const headers = 'Date,Guard Name,Employee ID,Site,Clock In,Clock Out,Hours Worked,Clock-in Location\n';
     const rows = records.map(r =>
-      `"${r.date}","${r.guard_name}","${r.employee_id || ''}","${r.site_name || ''}","${r.clock_in}","${r.clock_out || ''}","${r.hours_worked || ''}"`
+      `"${r.date}","${r.guard_name}","${r.employee_id || ''}","${r.site_name || ''}","${r.clock_in}","${r.clock_out || ''}","${r.hours_worked || ''}","${r.within_geofence == null ? '' : r.within_geofence ? 'Inside geofence' : 'Outside geofence'}"`
     ).join('\n');
 
     res.setHeader('Content-Type', 'text/csv');

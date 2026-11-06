@@ -86,6 +86,7 @@ app.use('/api/alerts', require('./routes/alerts.routes'));
 app.use('/api/patrol', require('./routes/patrol.routes'));
 app.use('/api/command', require('./routes/command.routes'));
 app.use('/api/client', require('./routes/client.routes'));
+app.use('/api/leave', require('./routes/leave.routes'));
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -93,13 +93,14 @@ export default function AttendancePage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Clock In</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Clock Out</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Hours</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Clock-in location</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {isLoading ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
               ) : records.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">No records found</td></tr>
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No records found</td></tr>
               ) : (
                 records.map((r: any) => (
                   <tr key={r.id} className="hover:bg-gray-50">
@@ -109,6 +110,12 @@ export default function AttendancePage() {
                     <td className="px-4 py-3">{r.clock_in ? formatDateTime(r.clock_in) : '—'}</td>
                     <td className="px-4 py-3">{r.clock_out ? formatDateTime(r.clock_out) : <span className="text-amber-600">Active</span>}</td>
                     <td className="px-4 py-3">{r.hours_worked ? `${r.hours_worked}h` : '—'}</td>
+                    <td className="px-4 py-3">
+                      {r.within_geofence == null ? <span className="text-gray-400">—</span>
+                        : r.within_geofence
+                          ? <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Inside geofence</span>
+                          : <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">Outside geofence</span>}
+                    </td>
                   </tr>
                 ))
               )}

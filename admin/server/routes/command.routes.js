@@ -3,6 +3,7 @@ const express = require('express');
 const db = require('../db');
 const { authMiddleware, requireRole } = require('../auth');
 const { createAlert } = require('../lib/alerts');
+const { checkFence, polygonsBySite } = require('../lib/geo');
 
 const router = express.Router();
 
@@ -39,16 +40,12 @@ function guardLiveStatus(guardId, config, site) {
     if (d != null && d < (config.idle_distance_meters || 50)) status = 'idle';
   }
 
-  // Geofence: outside the site radius → off-site (takes visual precedence).
-  let offsite = false, distanceFromSite = null;
-  if (site && site.geofence_enabled && site.lat != null && locs[0].lat != null) {
-    distanceFromSite = haversine(locs[0].lat, locs[0].lng, site.lat, site.lng);
-    if (distanceFromSite != null && distanceFromSite > (site.geofence_radius_m || 150)) {
-      offsite = true;
-      status = 'out-of-location';
-    }
-  }
-  return { status, battery: locs[0].battery, lastPing: locs[0].timestamp, lat: locs[0].lat, lng: locs[0].lng, offsite, distanceFromSite: distanceFromSite == null ? null : Math.round(distanceFromSite) };
+  // Geofence (radius or polygon): outside the fence -> out of location (takes visual precedence).
+  const fence = site ? checkFence(site, locs[0].lat, locs[0].lng, site.polygon || []) : { active: false };
+  const offsite = !!(fence.active && !fence.inside);
+  if (offsite) status = 'out-of-location';
+  const distanceFromSite = fence.active ? fence.distance : null;
+  return { status, battery: locs[0].battery, lastPing: locs[0].timestamp, lat: locs[0].lat, lng: locs[0].lng, offsite, distanceFromSite };
 }
 
 // GET /api/command/live - full live board (sites, shortages, alerts, incidents)
@@ -58,6 +55,7 @@ router.get('/live', authMiddleware, requireRole('admin', 'staff'), (req, res) =>
     const now = new Date();
 
     const sites = db.prepare('SELECT * FROM sites ORDER BY name').all();
+    const polys = polygonsBySite();
     const siteBoard = sites.map(site => {
       const shifts = db.prepare('SELECT * FROM site_shifts WHERE site_id = ?').all(site.id);
       const activeShifts = shifts.filter(s => shiftActiveNow(s, now));
@@ -82,6 +80,7 @@ router.get('/live', authMiddleware, requireRole('admin', 'staff'), (req, res) =>
         site_id: site.id, site_name: site.name, address: site.address,
         lat: site.lat, lng: site.lng,
         geofence_enabled: !!site.geofence_enabled, geofence_radius_m: site.geofence_radius_m,
+        geofence_type: site.geofence_type || 'radius', geofence_polygon: polys[site.id] || [],
         activeShifts: activeShifts.map(s => s.label),
         required, onDuty, shortage,
       };
@@ -90,13 +89,13 @@ router.get('/live', authMiddleware, requireRole('admin', 'staff'), (req, res) =>
     // Live guard roster (clocked-in)
     const clockedIn = db.prepare(`
       SELECT g.id, g.name, g.site_id, s.name AS site_name,
-             s.lat AS site_lat, s.lng AS site_lng, s.geofence_radius_m, s.geofence_enabled
+             s.lat AS site_lat, s.lng AS site_lng, s.geofence_radius_m, s.geofence_enabled, s.geofence_type
       FROM guards g LEFT JOIN sites s ON s.id = g.site_id
       WHERE g.clocked_in = 1 AND g.approval_status = 'active'
     `).all();
     const roster = clockedIn.map(g => ({
       id: g.id, name: g.name, site_id: g.site_id, site_name: g.site_name,
-      ...guardLiveStatus(g.id, config, { lat: g.site_lat, lng: g.site_lng, geofence_radius_m: g.geofence_radius_m, geofence_enabled: g.geofence_enabled }),
+      ...guardLiveStatus(g.id, config, { id: g.site_id, lat: g.site_lat, lng: g.site_lng, geofence_radius_m: g.geofence_radius_m, geofence_enabled: g.geofence_enabled, geofence_type: g.geofence_type, polygon: polys[g.site_id] }),
     }));
 
     // Alerts + incidents
@@ -154,9 +153,10 @@ router.get('/live', authMiddleware, requireRole('admin', 'staff'), (req, res) =>
 router.get('/map', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const config = db.prepare('SELECT * FROM system_config WHERE id = 1').get() || {};
+    const polys = polygonsBySite();
     const clockedIn = db.prepare(`
       SELECT g.id, g.name, g.site_id, s.name AS site_name,
-             s.lat AS site_lat, s.lng AS site_lng, s.geofence_radius_m, s.geofence_enabled
+             s.lat AS site_lat, s.lng AS site_lng, s.geofence_radius_m, s.geofence_enabled, s.geofence_type
       FROM guards g LEFT JOIN sites s ON s.id = g.site_id
       WHERE g.clocked_in = 1 AND g.approval_status = 'active'
     `).all();
@@ -164,7 +164,7 @@ router.get('/map', authMiddleware, requireRole('admin', 'staff'), (req, res) => 
     const guards = clockedIn
       .map(g => ({
         id: g.id, name: g.name, site_id: g.site_id, site_name: g.site_name,
-        ...guardLiveStatus(g.id, config, { lat: g.site_lat, lng: g.site_lng, geofence_radius_m: g.geofence_radius_m, geofence_enabled: g.geofence_enabled }),
+        ...guardLiveStatus(g.id, config, { id: g.site_id, lat: g.site_lat, lng: g.site_lng, geofence_radius_m: g.geofence_radius_m, geofence_enabled: g.geofence_enabled, geofence_type: g.geofence_type, polygon: polys[g.site_id] }),
       }))
       .filter(g => g.lat != null && g.lng != null);
 
@@ -174,11 +174,10 @@ router.get('/map', authMiddleware, requireRole('admin', 'staff'), (req, res) => 
       WHERE c.is_active = 1 AND c.lat IS NOT NULL AND c.lng IS NOT NULL
     `).all();
 
-    // Geofenced sites → drawn as circles on the map.
-    const geofences = db.prepare(`
-      SELECT id, name, lat, lng, geofence_radius_m FROM sites
-      WHERE geofence_enabled = 1 AND lat IS NOT NULL AND lng IS NOT NULL
-    `).all();
+    // Geofenced sites, drawn as circles or polygons on the map.
+    const geofences = db.prepare('SELECT id, name, lat, lng, geofence_radius_m, geofence_type FROM sites WHERE geofence_enabled = 1').all()
+      .map(sf => ({ ...sf, geofence_type: sf.geofence_type || 'radius', polygon: polys[sf.id] || [] }))
+      .filter(sf => sf.geofence_type === 'polygon' ? sf.polygon.length >= 3 : sf.lat != null && sf.lng != null);
 
     // Open SOS incidents with coordinates (shown as urgent pins)
     const sos = db.prepare(`

@@ -1,5 +1,5 @@
 import { Fragment, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { formatTime } from '@/lib/utils';
@@ -34,7 +34,7 @@ export type MapGuard = {
   id: number; name: string; site_name?: string; lat: number | null; lng: number | null;
   status: string; offsite?: boolean; distanceFromSite?: number | null; battery?: number | null; lastPing?: string | null;
 };
-export type MapFence = { id: number; name: string; lat: number; lng: number; radius: number };
+export type MapFence = { id: number; name: string; lat: number | null; lng: number | null; radius: number; points?: [number, number][] };
 export type MapSos = { id: number; lat: number; lng: number; guard_name?: string; site_name?: string; created_at: string };
 export type Focus = { lat: number; lng: number; zoom?: number; key: number } | null;
 
@@ -71,7 +71,7 @@ export default function LiveMap({ guards, fences, sos, focus, fitKey, height = 5
   // Frame the guards being shown; fall back to the site fences when no guard has a location.
   const points: [number, number][] = located.length
     ? located.map(g => [g.lat as number, g.lng as number] as [number, number])
-    : fences.map(f => [f.lat, f.lng] as [number, number]);
+    : fences.flatMap(f => f.points && f.points.length >= 3 ? f.points : f.lat != null && f.lng != null ? [[f.lat, f.lng] as [number, number]] : []);
   const center: [number, number] = points[0] || [12.9716, 77.5946]; // Bengaluru fallback
 
   return (
@@ -84,12 +84,22 @@ export default function LiveMap({ guards, fences, sos, focus, fitKey, height = 5
         <FitToPoints points={points} fitKey={fitKey} />
         <FlyTo focus={focus} />
 
-        {fences.map(f => (
-          <Circle key={`f-${f.id}`} center={[f.lat, f.lng]} radius={f.radius}
-            pathOptions={{ color: STATUS_COLORS.fence, weight: 1.5, dashArray: '6 6', fillColor: STATUS_COLORS.fence, fillOpacity: 0.07 }}>
-            <Popup><strong>{f.name}</strong><br />Geofence: {f.radius} m radius</Popup>
-          </Circle>
-        ))}
+        {fences.map(f => {
+          const style = { color: STATUS_COLORS.fence, weight: 1.5, dashArray: '6 6', fillColor: STATUS_COLORS.fence, fillOpacity: 0.07 };
+          if (f.points && f.points.length >= 3) {
+            return (
+              <Polygon key={`f-${f.id}`} positions={f.points} pathOptions={style}>
+                <Popup><strong>{f.name}</strong><br />Geofence: custom area</Popup>
+              </Polygon>
+            );
+          }
+          if (f.lat == null || f.lng == null) return null;
+          return (
+            <Circle key={`f-${f.id}`} center={[f.lat, f.lng]} radius={f.radius} pathOptions={style}>
+              <Popup><strong>{f.name}</strong><br />Geofence: {f.radius} m radius</Popup>
+            </Circle>
+          );
+        })}
 
         {located.map(g => (
           <Marker key={`g-${g.id}`} position={[g.lat as number, g.lng as number]}

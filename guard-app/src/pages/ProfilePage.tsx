@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { guardApi } from '@/services/api';
@@ -5,7 +6,7 @@ import FaceCapture from '@/components/FaceCapture';
 import BiometricConsent from '@/components/BiometricConsent';
 import {
   LogOut, Phone, Mail, Building2, Clock, DollarSign, User, ScanFace,
-  CheckCircle, AlertTriangle, Trash2, X, ChevronRight, CalendarDays, ShieldCheck,
+  CheckCircle, AlertTriangle, Trash2, X, ChevronRight, CalendarDays, ShieldCheck, CalendarOff,
 } from 'lucide-react';
 
 export default function ProfilePage() {
@@ -139,6 +140,13 @@ export default function ProfilePage() {
           </button>
         </div>
       )}
+
+      {/* Leave */}
+      <Link to="/leave" className="w-full flex items-center gap-3 mb-4 bg-white rounded-xl border p-4 hover:bg-gray-50">
+        <CalendarOff className="w-5 h-5 text-gray-500" />
+        <span className="flex-1 font-medium text-gray-900">Leave requests</span>
+        <ChevronRight className="w-5 h-5 text-gray-400" />
+      </Link>
 
       {/* Details */}
       <div className="bg-white rounded-xl border divide-y">
