@@ -45,16 +45,18 @@ function fenceActive(site, polygon) {
 /**
  * Check a position against a site's fence.
  * site needs: lat, lng, geofence_enabled, geofence_type, geofence_radius_m.
- * Returns { active, inside, distance } where distance is metres from the site centre
- * (or polygon centroid when the site has no centre), for display.
+ * Returns { active, inside, distance } where distance is metres from the fence centre
+ * (polygon centroid for polygon fences, otherwise the site centre), for display.
  */
 function checkFence(site, lat, lng, polygon) {
   if (lat == null || lng == null) return { active: false, inside: true, distance: null };
   const poly = site && site.geofence_type === 'polygon' ? (polygon || polygonPoints(site.id)) : null;
   if (!fenceActive(site, poly)) return { active: false, inside: true, distance: null };
 
+  // Distance is measured from the fence itself: the polygon's centre for polygon
+  // fences (the site pin may be stale after the area is redrawn), else the site centre.
   let cLat = site.lat, cLng = site.lng;
-  if ((cLat == null || cLng == null) && poly) {
+  if (poly) {
     cLat = poly.reduce((s, p) => s + p.lat, 0) / poly.length;
     cLng = poly.reduce((s, p) => s + p.lng, 0) / poly.length;
   }
