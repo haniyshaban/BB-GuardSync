@@ -33,12 +33,37 @@ function seedDefaultAdmin() {
     const existing = db.prepare('SELECT id FROM staff WHERE role = ?').get('admin');
     if (!existing) {
       const email = process.env.ADMIN_EMAIL || 'admin@blackbelt.app';
-      const password = process.env.ADMIN_PASSWORD || 'admin123';
+      const isProd = process.env.NODE_ENV === 'production';
+
+      // Never seed a known default password in production. If ADMIN_PASSWORD is
+      // unset there, generate a strong random one and print it once so the
+      // operator can retrieve it from the boot logs and change it immediately.
+      let password = process.env.ADMIN_PASSWORD;
+      let generated = false;
+      if (!password) {
+        if (isProd) {
+          password = crypto.randomBytes(12).toString('base64url');
+          generated = true;
+        } else {
+          password = 'admin123';
+        }
+      }
+
       const hash = bcrypt.hashSync(password, 10);
       db.prepare(
         'INSERT OR IGNORE INTO staff (name, email, password, phone, role, org_id) VALUES (?, ?, ?, ?, ?, ?)'
       ).run('Admin User', email, hash, '0000000000', 'admin', org.id);
-      console.log(`  ✓ Default admin created: ${email}`);
+
+      if (generated) {
+        console.log('\n  ============================================================');
+        console.log('  ✓ Default admin created (ADMIN_PASSWORD was not set).');
+        console.log(`    Email:    ${email}`);
+        console.log(`    Password: ${password}`);
+        console.log('    ⚠️  Shown once — save it and change it after first login.');
+        console.log('  ============================================================\n');
+      } else {
+        console.log(`  ✓ Default admin created: ${email}`);
+      }
     } else {
       // Link existing admin to the org if not already linked
       db.prepare('UPDATE staff SET org_id = ? WHERE id = ? AND org_id IS NULL')
