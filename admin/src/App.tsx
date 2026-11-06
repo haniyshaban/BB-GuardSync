@@ -17,6 +17,7 @@ import TasksPage from './pages/TasksPage';
 import IncidentsPage from './pages/IncidentsPage';
 import PatrolPage from './pages/PatrolPage';
 import ClientsPage from './pages/ClientsPage';
+import LeavePage from './pages/LeavePage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -42,6 +43,7 @@ export default function App() {
                 <Route path="/sites" element={<SitesPage />} />
                 <Route path="/sites/:id/manage" element={<ManageSitePage />} />
                 <Route path="/attendance" element={<AttendancePage />} />
+                <Route path="/leave" element={<LeavePage />} />
                 <Route path="/patrol" element={<PatrolPage />} />
                 <Route path="/tasks" element={<TasksPage />} />
                 <Route path="/incidents" element={<IncidentsPage />} />

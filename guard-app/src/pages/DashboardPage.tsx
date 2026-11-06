@@ -32,6 +32,8 @@ export default function DashboardPage() {
   const [activeFaceCheckId, setActiveFaceCheckId] = useState<number | null>(null);
   const [clockInFaceOpen, setClockInFaceOpen] = useState(false);
   const [clockInSuccess, setClockInSuccess] = useState(false);
+  // Set when the server says this clock-in was outside the site geofence (metres from site).
+  const [fenceWarning, setFenceWarning] = useState<number | null>(null);
 
   // Refresh user data on mount
   useEffect(() => {
@@ -106,7 +108,8 @@ export default function DashboardPage() {
       setClockedIn(true);
       setClockInTime(res.data.clockIn);
       updateUser({ clocked_in: true, clock_in_time: res.data.clockIn });
-      if (faceDescriptor) setClockInSuccess(true);
+      if (res.data.withinGeofence === false) setFenceWarning(res.data.distanceFromSite ?? 0);
+      else if (faceDescriptor) setClockInSuccess(true);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -209,6 +212,20 @@ export default function DashboardPage() {
             <p className="text-sm opacity-90">Identity verified. Have a safe shift!</p>
           </div>
           <button onClick={() => setClockInSuccess(false)} className="opacity-70 hover:opacity-100"><XCircle className="w-5 h-5" /></button>
+        </div>
+      )}
+
+      {/* Clocked in outside the site geofence */}
+      {fenceWarning !== null && (
+        <div className="fixed top-4 left-4 right-4 z-40 rounded-xl p-4 flex items-start gap-3 shadow-lg bg-amber-500 text-white">
+          <MapPin className="w-6 h-6 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold">Clocked in outside your site</p>
+            <p className="text-sm opacity-95">
+              You are about {fenceWarning} m from {user?.siteName || 'your site'}. Your supervisor can see this. Please move inside the site area.
+            </p>
+          </div>
+          <button onClick={() => setFenceWarning(null)} className="opacity-80 hover:opacity-100"><XCircle className="w-5 h-5" /></button>
         </div>
       )}
 

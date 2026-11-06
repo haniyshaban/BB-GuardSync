@@ -15,7 +15,9 @@ const DEMO_DOMAIN = '@demo.blackbelt.app';
 const SITES = [
   { key: 'hrbr', name: 'Blackbelt HRBR Office', address: '5th Main Rd, HRBR Layout, Bengaluru', lat: 13.01160, lng: 77.64100, radius: 150 },
   { key: 'indiranagar', name: 'Blackbelt Indiranagar Metro', address: '100 Feet Rd, Indiranagar, Bengaluru', lat: 12.97840, lng: 77.64080, radius: 150 },
-  { key: 'koramangala', name: 'Blackbelt Koramangala Forum', address: 'Hosur Rd, Koramangala, Bengaluru', lat: 12.93480, lng: 77.61150, radius: 150 },
+  // Polygon fence: the mall's footprint rather than a circle.
+  { key: 'koramangala', name: 'Blackbelt Koramangala Forum', address: 'Hosur Rd, Koramangala, Bengaluru', lat: 12.93480, lng: 77.61150, radius: 150,
+    polygon: [[12.93585, 77.61040], [12.93590, 77.61235], [12.93470, 77.61280], [12.93365, 77.61190], [12.93380, 77.61045]] },
 ];
 
 // Guards. dlat/dlng are small offsets (degrees) from the site centre.
@@ -51,13 +53,19 @@ function getOrgId() {
 
 function ensureSite(orgId, s) {
   let row = db.prepare('SELECT id FROM sites WHERE name = ?').get(s.name);
+  const fenceType = s.polygon ? 'polygon' : 'radius';
   if (!row) {
-    const r = db.prepare(`INSERT INTO sites (org_id, name, address, lat, lng, geofence_radius_m, geofence_enabled)
-      VALUES (?,?,?,?,?,?,1)`).run(orgId, s.name, s.address, s.lat, s.lng, s.radius);
+    const r = db.prepare(`INSERT INTO sites (org_id, name, address, lat, lng, geofence_radius_m, geofence_enabled, geofence_type)
+      VALUES (?,?,?,?,?,?,1,?)`).run(orgId, s.name, s.address, s.lat, s.lng, s.radius, fenceType);
     row = { id: r.lastInsertRowid };
   } else {
-    db.prepare(`UPDATE sites SET address=?, lat=?, lng=?, geofence_radius_m=?, geofence_enabled=1 WHERE id=?`)
-      .run(s.address, s.lat, s.lng, s.radius, row.id);
+    db.prepare(`UPDATE sites SET address=?, lat=?, lng=?, geofence_radius_m=?, geofence_enabled=1, geofence_type=? WHERE id=?`)
+      .run(s.address, s.lat, s.lng, s.radius, fenceType, row.id);
+  }
+  db.prepare('DELETE FROM site_geofence_points WHERE site_id = ?').run(row.id);
+  if (s.polygon) {
+    const ins = db.prepare('INSERT INTO site_geofence_points (site_id, lat, lng, point_order) VALUES (?,?,?,?)');
+    s.polygon.forEach(([lat, lng], i) => ins.run(row.id, lat, lng, i));
   }
   // Ensure a day shift exists
   const shift = db.prepare('SELECT id FROM site_shifts WHERE site_id=? LIMIT 1').get(row.id);
@@ -127,6 +135,24 @@ function ensureDemo() {
     const insT = db.prepare("INSERT INTO tasks (org_id, guard_id, site_id, title, description, priority, status) VALUES (?,?,?,?,?,?,?)");
     if (hrbrSite && g1) insT.run(orgId, g1, hrbrSite, 'Verify visitor register', 'Check the front-desk visitor log is up to date', 'normal', 'open');
     if (hrbrSite && g2) insT.run(orgId, g2, hrbrSite, 'Perimeter round', 'Walk the building perimeter and report issues', 'high', 'in_progress');
+  }
+
+  // Patrol checkpoints at HRBR (inside the fence).
+  const hrbrId = siteIds.hrbr;
+  if (hrbrId && !db.prepare('SELECT id FROM checkpoints WHERE site_id = ?').get(hrbrId)) {
+    const insCp = db.prepare('INSERT INTO checkpoints (site_id, label, code, lat, lng, radius_meters, sort_order) VALUES (?,?,?,?,?,?,?)');
+    [['Main gate', 0.00085, 0.0000], ['Parking', -0.0006, 0.0007], ['Rear exit', -0.0004, -0.0008]]
+      .forEach(([label, dlat, dlng], i) => insCp.run(hrbrId, label, `HRBR-CP${i + 1}`, 13.01160 + dlat, 77.64100 + dlng, 30, i + 1));
+  }
+
+  // Sample leave requests: two pending (for the approval demo) and one approved.
+  if (!db.prepare('SELECT id FROM leave_requests LIMIT 1').get()) {
+    const day = n => new Date(Date.now() + n * 86400000).toISOString().split('T')[0];
+    const gid = emp => db.prepare('SELECT id FROM guards WHERE employee_id = ?').get(emp)?.id;
+    const insL = db.prepare('INSERT INTO leave_requests (guard_id, leave_type, start_date, end_date, reason, status, reviewed_at) VALUES (?,?,?,?,?,?,?)');
+    if (gid('HRBR-02')) insL.run(gid('HRBR-02'), 'sick', day(1), day(2), 'Fever, doctor advised rest', 'pending', null);
+    if (gid('KOR-03')) insL.run(gid('KOR-03'), 'earned', day(5), day(7), 'Family function in Mysuru', 'pending', null);
+    if (gid('IND-02')) insL.run(gid('IND-02'), 'casual', day(3), day(3), 'Bank work', 'approved', new Date().toISOString());
   }
 
   return { siteIds };

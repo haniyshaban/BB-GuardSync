@@ -4,10 +4,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/utils';
 import {
   Radio, Users, Building2, ClipboardCheck, Route, ClipboardList, AlertOctagon,
-  Bell, Clock, DollarSign, Package, Eye, Settings, LogOut, X,
+  Bell, Clock, DollarSign, Package, Eye, Settings, LogOut, X, CalendarOff,
 } from 'lucide-react';
 
-type Item = { to: string; icon: any; label: string; badge?: 'alerts' };
+type Item = { to: string; icon: any; label: string; badge?: 'alerts' | 'leave' };
 
 const sections: { title?: string; items: Item[] }[] = [
   { items: [{ to: '/', icon: Radio, label: 'Live Dashboard' }] },
@@ -17,6 +17,7 @@ const sections: { title?: string; items: Item[] }[] = [
       { to: '/guards', icon: Users, label: 'Guards' },
       { to: '/sites', icon: Building2, label: 'Sites' },
       { to: '/attendance', icon: ClipboardCheck, label: 'Attendance' },
+      { to: '/leave', icon: CalendarOff, label: 'Leave', badge: 'leave' },
     ],
   },
   {
@@ -53,6 +54,13 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
     refetchInterval: 30000,
   });
   const activeAlerts: number = countRes?.data?.active || 0;
+  const { data: leaveRes } = useQuery({
+    queryKey: ['leave-summary'],
+    queryFn: () => api('/leave/summary'),
+    refetchInterval: 60000,
+  });
+  const pendingLeave: number = leaveRes?.data?.pending || 0;
+  const badgeCount = (b?: Item['badge']) => (b === 'alerts' ? activeAlerts : b === 'leave' ? pendingLeave : 0);
 
   return (
     <div className="flex flex-col h-full bg-gray-900 text-white">
@@ -92,9 +100,9 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
                 >
                   <Icon className="w-[18px] h-[18px]" />
                   <span className="flex-1">{label}</span>
-                  {badge === 'alerts' && activeAlerts > 0 && (
-                    <span className="min-w-[20px] px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[11px] font-semibold text-center">
-                      {activeAlerts > 99 ? '99+' : activeAlerts}
+                  {badgeCount(badge) > 0 && (
+                    <span className={`min-w-[20px] px-1.5 py-0.5 rounded-full text-white text-[11px] font-semibold text-center ${badge === 'alerts' ? 'bg-red-600' : 'bg-amber-500'}`}>
+                      {badgeCount(badge) > 99 ? '99+' : badgeCount(badge)}
                     </span>
                   )}
                 </NavLink>

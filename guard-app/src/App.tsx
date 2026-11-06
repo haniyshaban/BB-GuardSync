@@ -8,6 +8,7 @@ import PayslipPage from './pages/PayslipPage';
 import DeleteAccountPage from './pages/DeleteAccountPage';
 import TasksPage from './pages/TasksPage';
 import PatrolPage from './pages/PatrolPage';
+import LeavePage from './pages/LeavePage';
 import BottomNav from './components/BottomNav';
 import SosButton from './components/SosButton';
 
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
           <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
           <Route path="/patrol" element={<ProtectedRoute><PatrolPage /></ProtectedRoute>} />
+          <Route path="/leave" element={<ProtectedRoute><LeavePage /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/payslip" element={<ProtectedRoute><PayslipPage /></ProtectedRoute>} />
           <Route path="/delete-account" element={<DeleteAccountPage />} />

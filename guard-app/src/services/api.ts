@@ -78,6 +78,14 @@ export const guardApi = {
   updateTaskStatus: (id: number, status: string, note?: string, photoUrl?: string) =>
     request(`/tasks/${id}/status`, { method: 'PUT', body: JSON.stringify({ status, note, photoUrl }) }),
 
+  // Leave
+  getMyLeave: () => request('/leave/mine'),
+
+  applyLeave: (data: { leaveType: string; startDate: string; endDate: string; reason?: string }) =>
+    request('/leave', { method: 'POST', body: JSON.stringify(data) }),
+
+  cancelLeave: (id: number) => request(`/leave/${id}/cancel`, { method: 'PUT' }),
+
   // Patrolling
   getMyCheckpoints: () => request('/patrol/my-checkpoints'),
 
