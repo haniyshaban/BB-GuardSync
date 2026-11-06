@@ -99,6 +99,7 @@ if (process.env.SEED_DEMO_HRBR) {
     demo.ensureDemo();
     demo.refreshPings();
     console.log('  ✓ HRBR demo data loaded (SEED_DEMO_HRBR)');
+    console.log('  Demo placement: ' + demo.describePlacement());
   } catch (e) {
     console.error('HRBR demo seed error:', e.message);
   }

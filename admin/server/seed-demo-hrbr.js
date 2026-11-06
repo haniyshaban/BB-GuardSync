@@ -3,10 +3,11 @@
 // has stepped outside the HRBR geofence to demonstrate the "Off-site" feature.
 //
 // ensureDemo(): idempotent — creates/updates the sites, guards and today's attendance.
-// refreshPings(): re-stamps each demo guard's GPS ping to "now" at its fixed location,
-//                 so the Command Centre / Live Map keep showing them live between boots.
+// refreshPings(): re-stamps each demo guard's GPS ping to "now", placed against the site's
+//                 current geofence (all inside except the designated out-of-location guard).
 const db = require('./db');
 const bcrypt = require('bcryptjs');
+const { haversine, pointInPolygon, polygonPoints, checkFence } = require('./lib/geo');
 
 const PWD_HASH = bcrypt.hashSync('guard123', 10);
 const DEMO_DOMAIN = '@demo.blackbelt.app';
@@ -53,19 +54,17 @@ function getOrgId() {
 
 function ensureSite(orgId, s) {
   let row = db.prepare('SELECT id FROM sites WHERE name = ?').get(s.name);
-  const fenceType = s.polygon ? 'polygon' : 'radius';
+  // Location and geofence are only set when the demo first creates the site.
+  // After that they belong to the admin (Manage Site), so they are never overwritten.
   if (!row) {
+    const fenceType = s.polygon ? 'polygon' : 'radius';
     const r = db.prepare(`INSERT INTO sites (org_id, name, address, lat, lng, geofence_radius_m, geofence_enabled, geofence_type)
       VALUES (?,?,?,?,?,?,1,?)`).run(orgId, s.name, s.address, s.lat, s.lng, s.radius, fenceType);
     row = { id: r.lastInsertRowid };
-  } else {
-    db.prepare(`UPDATE sites SET address=?, lat=?, lng=?, geofence_radius_m=?, geofence_enabled=1, geofence_type=? WHERE id=?`)
-      .run(s.address, s.lat, s.lng, s.radius, fenceType, row.id);
-  }
-  db.prepare('DELETE FROM site_geofence_points WHERE site_id = ?').run(row.id);
-  if (s.polygon) {
-    const ins = db.prepare('INSERT INTO site_geofence_points (site_id, lat, lng, point_order) VALUES (?,?,?,?)');
-    s.polygon.forEach(([lat, lng], i) => ins.run(row.id, lat, lng, i));
+    if (s.polygon) {
+      const ins = db.prepare('INSERT INTO site_geofence_points (site_id, lat, lng, point_order) VALUES (?,?,?,?)');
+      s.polygon.forEach(([lat, lng], i) => ins.run(row.id, lat, lng, i));
+    }
   }
   // Ensure a day shift exists
   const shift = db.prepare('SELECT id FROM site_shifts WHERE site_id=? LIMIT 1').get(row.id);
@@ -158,29 +157,124 @@ function ensureDemo() {
   return { siteIds };
 }
 
-// Re-stamp each demo guard's latest GPS ping to "now" at its fixed position so the
-// live views keep showing them (and the off-site guard stays outside the fence).
+// ---------- Placing demo guards relative to each site's *current* geofence ----------
+
+const M_PER_DEG = 111320;
+
+// Small deterministic PRNG so positions are stable between refreshes.
+function rng(seed) {
+  let x = seed >>> 0 || 1;
+  return () => ((x = (x * 1664525 + 1013904223) >>> 0) / 4294967296);
+}
+
+function siteFence(name) {
+  const site = db.prepare('SELECT * FROM sites WHERE name = ?').get(name);
+  if (!site) return null;
+  const polygon = polygonPoints(site.id);
+  return { site, polygon };
+}
+
+/**
+ * Positions for a site's demo guards: `nInside` spread inside the fence and
+ * `nOutside` placed beyond it. Works for radius and polygon fences.
+ */
+function placements(fence, fallback, nInside, nOutside, seed) {
+  const { site, polygon } = fence;
+  const usePolygon = site.geofence_type === 'polygon' && polygon.length >= 3;
+  const inside = [], outside = [];
+
+  if (usePolygon) {
+    const lats = polygon.map(p => p.lat), lngs = polygon.map(p => p.lng);
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats), minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+    const cLat = (minLat + maxLat) / 2, cLng = (minLng + maxLng) / 2;
+    const rand = rng(seed);
+    const minGap = 12; // metres between guards so markers don't stack
+    for (let tries = 0; tries < 4000 && inside.length < nInside; tries++) {
+      const lat = cLat + (rand() - 0.5) * (maxLat - minLat) * 0.8;
+      const lng = cLng + (rand() - 0.5) * (maxLng - minLng) * 0.8;
+      if (!pointInPolygon(lat, lng, polygon)) continue;
+      if (inside.some(q => haversine(lat, lng, q.lat, q.lng) < minGap)) continue;
+      inside.push({ lat, lng });
+    }
+    // If the area is tiny or oddly shaped, fall back to polygon vertices nudged inward.
+    for (let i = 0; inside.length < nInside; i++) {
+      const v = polygon[i % polygon.length];
+      inside.push({ lat: v.lat + (cLat - v.lat) * 0.3, lng: v.lng + (cLng - v.lng) * 0.3 });
+    }
+    for (let i = 0; i < nOutside; i++) {
+      outside.push({ lat: maxLat + (170 + i * 40) / M_PER_DEG, lng: cLng });
+    }
+  } else {
+    const cLat = site.lat ?? fallback.lat, cLng = site.lng ?? fallback.lng;
+    const r = site.geofence_radius_m || 150;
+    const lngScale = M_PER_DEG * Math.cos((cLat * Math.PI) / 180);
+    for (let i = 0; i < nInside; i++) {
+      const ang = (i / Math.max(nInside, 1)) * 2 * Math.PI + 0.4;
+      const d = r * (0.3 + 0.35 * ((i % 3) / 2)); // 30–65% of the radius
+      inside.push({ lat: cLat + (d * Math.cos(ang)) / M_PER_DEG, lng: cLng + (d * Math.sin(ang)) / lngScale });
+    }
+    for (let i = 0; i < nOutside; i++) {
+      outside.push({ lat: cLat + (r + 170 + i * 40) / M_PER_DEG, lng: cLng });
+    }
+  }
+  return { inside, outside };
+}
+
+// Current target position for every demo guard, keyed by employee id.
+function demoPositions() {
+  const out = {};
+  SITES.forEach((s, si) => {
+    const fence = siteFence(s.name);
+    if (!fence) return;
+    const gs = GUARDS.filter(g => g.site === s.key);
+    const pos = placements(fence, { lat: s.lat, lng: s.lng }, gs.filter(g => !g.offsite).length, gs.filter(g => g.offsite).length, 7919 * (si + 1));
+    let a = 0, b = 0;
+    for (const g of gs) out[g.emp] = g.offsite ? pos.outside[b++] : pos.inside[a++];
+  });
+  return out;
+}
+
+// Re-stamp each demo guard's GPS ping to "now", positioned against the site's
+// current geofence, so the live views stay populated and follow fence edits.
 function refreshPings() {
+  const positions = demoPositions();
   const ins = db.prepare('INSERT INTO guard_locations (guard_id, lat, lng, accuracy, battery, timestamp) VALUES (?,?,?,?,?,datetime(\'now\'))');
   const tx = db.transaction(() => {
     for (const g of GUARDS) {
-      const email = g.emp.toLowerCase() + DEMO_DOMAIN;
-      const guard = db.prepare('SELECT id FROM guards WHERE email = ?').get(email);
-      if (!guard) continue;
-      const site = SITES.find(s => s.key === g.site);
+      const guard = db.prepare('SELECT id FROM guards WHERE email = ?').get(g.emp.toLowerCase() + DEMO_DOMAIN);
+      const pos = positions[g.emp];
+      if (!guard || !pos) continue;
       // keep only the last few pings per demo guard to avoid unbounded growth
       db.prepare(`DELETE FROM guard_locations WHERE guard_id=? AND id NOT IN
         (SELECT id FROM guard_locations WHERE guard_id=? ORDER BY timestamp DESC LIMIT 3)`).run(guard.id, guard.id);
-      ins.run(guard.id, site.lat + g.dlat, site.lng + g.dlng, 8, g.battery);
-      if (g.offsite && !db.prepare('SELECT offsite_since FROM guards WHERE id=?').get(guard.id).offsite_since) {
-        db.prepare("UPDATE guards SET offsite_since = datetime('now', ?) WHERE id=?").run(`-${g.offsiteMins || 16} minutes`, guard.id);
+      ins.run(guard.id, pos.lat, pos.lng, 8, g.battery);
+      if (g.offsite) {
+        if (!db.prepare('SELECT offsite_since FROM guards WHERE id=?').get(guard.id).offsite_since) {
+          db.prepare("UPDATE guards SET offsite_since = datetime('now', ?) WHERE id=?").run(`-${g.offsiteMins || 16} minutes`, guard.id);
+        }
+      } else {
+        db.prepare('UPDATE guards SET offsite_since = NULL WHERE id = ?').run(guard.id);
       }
     }
   });
   tx();
 }
 
-module.exports = { ensureDemo, refreshPings };
+// One-line summary per site, logged at boot, to confirm placement against the live fence.
+function describePlacement() {
+  const positions = demoPositions();
+  return SITES.map(s => {
+    const fence = siteFence(s.name);
+    if (!fence) return `${s.name}: missing`;
+    const gs = GUARDS.filter(g => g.site === s.key && positions[g.emp]);
+    const res = gs.map(g => ({ g, f: checkFence(fence.site, positions[g.emp].lat, positions[g.emp].lng, fence.polygon) }));
+    const shape = fence.site.geofence_type === 'polygon' ? `polygon ${fence.polygon.length} pts` : `radius ${fence.site.geofence_radius_m} m`;
+    const outs = res.filter(r => !r.f.inside).map(r => `${r.g.name} ${r.f.distance} m`).join(', ');
+    return `${s.name} [${shape}${fence.site.geofence_enabled ? '' : ', disabled'}]: ${res.filter(r => r.f.inside).length} inside, ${res.filter(r => !r.f.inside).length} outside${outs ? ' (' + outs + ')' : ''}`;
+  }).join(' | ');
+}
+
+module.exports = { ensureDemo, refreshPings, describePlacement, demoPositions };
 
 // Allow running directly: node seed-demo-hrbr.js
 if (require.main === module) {
