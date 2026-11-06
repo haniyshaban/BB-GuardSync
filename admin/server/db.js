@@ -142,7 +142,7 @@ db.exec(`
     email TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL,
     phone TEXT,
-    role TEXT NOT NULL DEFAULT 'staff' CHECK(role IN ('admin','staff')),
+    role TEXT NOT NULL DEFAULT 'staff' CHECK(role IN ('admin','staff','client')),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -160,6 +160,155 @@ db.exec(`
   -- Ensure default config exists
   INSERT OR IGNORE INTO system_config (id) VALUES (1);
 
+  -- ============ RAKSHAM MODULES ============
+
+  -- Guard statutory documents (Aadhaar/PAN/EPF/Bank/PASARA etc.)
+  CREATE TABLE IF NOT EXISTS guard_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guard_id INTEGER NOT NULL REFERENCES guards(id) ON DELETE CASCADE,
+    doc_type TEXT NOT NULL CHECK(doc_type IN ('aadhaar','pan','epf','bank','pasara','police_verification','other')),
+    doc_number TEXT,
+    file_url TEXT,
+    verified INTEGER NOT NULL DEFAULT 0,
+    verified_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+    verified_at TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Assets catalogue
+  CREATE TABLE IF NOT EXISTS assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    category TEXT,
+    asset_tag TEXT UNIQUE,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    unit_value REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'available' CHECK(status IN ('available','allocated','maintenance','retired')),
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Asset allocations to guard or site
+  CREATE TABLE IF NOT EXISTS asset_allocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    guard_id INTEGER REFERENCES guards(id) ON DELETE SET NULL,
+    site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    allocated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    returned_at TEXT,
+    status TEXT NOT NULL DEFAULT 'issued' CHECK(status IN ('issued','returned','lost','damaged')),
+    notes TEXT
+  );
+
+  -- Field tasks assigned to guards
+  CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
+    guard_id INTEGER REFERENCES guards(id) ON DELETE SET NULL,
+    site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high','urgent')),
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','done','verified','cancelled')),
+    due_at TEXT,
+    created_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+    completed_at TEXT,
+    completion_note TEXT,
+    completion_photo_url TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Incident reports (incl. SOS)
+  CREATE TABLE IF NOT EXISTS incidents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
+    guard_id INTEGER REFERENCES guards(id) ON DELETE SET NULL,
+    site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
+    type TEXT NOT NULL DEFAULT 'incident' CHECK(type IN ('incident','sos')),
+    category TEXT,
+    severity TEXT NOT NULL DEFAULT 'medium' CHECK(severity IN ('low','medium','high','critical')),
+    description TEXT,
+    photo_url TEXT,
+    lat REAL,
+    lng REAL,
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','acknowledged','resolved')),
+    acknowledged_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+    acknowledged_at TEXT,
+    resolved_at TEXT,
+    resolution_note TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Operational alerts / notifications (sleep alert, shortage, SOS, etc.)
+  CREATE TABLE IF NOT EXISTS alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
+    guard_id INTEGER REFERENCES guards(id) ON DELETE SET NULL,
+    site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
+    type TEXT NOT NULL CHECK(type IN ('sleep','shortage','sos','incident','overtime','face_fail','low_battery','offline')),
+    severity TEXT NOT NULL DEFAULT 'medium' CHECK(severity IN ('low','medium','high','critical')),
+    message TEXT NOT NULL,
+    meta TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','acknowledged','resolved')),
+    acknowledged_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+    acknowledged_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Patrol checkpoints per site
+  CREATE TABLE IF NOT EXISTS checkpoints (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    code TEXT,
+    lat REAL,
+    lng REAL,
+    radius_meters INTEGER NOT NULL DEFAULT 50,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Patrol scan events
+  CREATE TABLE IF NOT EXISTS patrol_scans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    checkpoint_id INTEGER NOT NULL REFERENCES checkpoints(id) ON DELETE CASCADE,
+    guard_id INTEGER NOT NULL REFERENCES guards(id) ON DELETE CASCADE,
+    site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
+    lat REAL,
+    lng REAL,
+    distance_meters REAL,
+    verified INTEGER NOT NULL DEFAULT 0,
+    photo_url TEXT,
+    scanned_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Client site access (controlled read-only visibility)
+  CREATE TABLE IF NOT EXISTS client_sites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    staff_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+    site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    UNIQUE(staff_id, site_id)
+  );
+
+  -- Indexes for new modules
+  CREATE INDEX IF NOT EXISTS idx_guard_documents_guard_id ON guard_documents(guard_id);
+  CREATE INDEX IF NOT EXISTS idx_asset_allocations_asset_id ON asset_allocations(asset_id);
+  CREATE INDEX IF NOT EXISTS idx_asset_allocations_guard_id ON asset_allocations(guard_id);
+  CREATE INDEX IF NOT EXISTS idx_tasks_guard_id ON tasks(guard_id);
+  CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+  CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status);
+  CREATE INDEX IF NOT EXISTS idx_incidents_guard_id ON incidents(guard_id);
+  CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status);
+  CREATE INDEX IF NOT EXISTS idx_alerts_type ON alerts(type);
+  CREATE INDEX IF NOT EXISTS idx_checkpoints_site_id ON checkpoints(site_id);
+  CREATE INDEX IF NOT EXISTS idx_patrol_scans_guard_id ON patrol_scans(guard_id);
+  CREATE INDEX IF NOT EXISTS idx_patrol_scans_checkpoint_id ON patrol_scans(checkpoint_id);
+  CREATE INDEX IF NOT EXISTS idx_client_sites_staff_id ON client_sites(staff_id);
+
   -- Indexes for performance
   CREATE INDEX IF NOT EXISTS idx_guard_attendance_guard_id ON guard_attendance(guard_id);
   CREATE INDEX IF NOT EXISTS idx_guard_attendance_date ON guard_attendance(date);
@@ -175,5 +324,72 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_staff_org_id ON staff(org_id);
   CREATE INDEX IF NOT EXISTS idx_organizations_invite_code ON organizations(invite_code);
 `);
+
+// ============ MIGRATIONS (for existing databases) ============
+// Idempotent: adds columns only if missing, and rebuilds CHECK constraints via user_version.
+
+function hasColumn(table, column) {
+  return db.prepare(`PRAGMA table_info(${table})`).all().some(c => c.name === column);
+}
+
+function addColumn(table, column, definition) {
+  if (!hasColumn(table, column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
+// Guard statutory inline fields (quick-reference; files/verification live in guard_documents)
+addColumn('guards', 'aadhaar_number', 'TEXT');
+addColumn('guards', 'pan_number', 'TEXT');
+addColumn('guards', 'epf_number', 'TEXT');
+addColumn('guards', 'bank_account', 'TEXT');
+addColumn('guards', 'bank_ifsc', 'TEXT');
+addColumn('guards', 'pasara_number', 'TEXT');
+addColumn('guards', 'kyc_verified', 'INTEGER NOT NULL DEFAULT 0');
+
+// Battery + distance telemetry on location pings (Command Centre / low-battery alerts)
+addColumn('guard_locations', 'battery', 'INTEGER');
+addColumn('guard_locations_archive', 'battery', 'INTEGER');
+
+// Overtime + night-shift + alert thresholds on config
+addColumn('system_config', 'ot_daily_threshold_hours', 'REAL NOT NULL DEFAULT 9');
+addColumn('system_config', 'ot_weekly_threshold_hours', 'REAL NOT NULL DEFAULT 48');
+addColumn('system_config', 'night_shift_start', "TEXT NOT NULL DEFAULT '22:00'");
+addColumn('system_config', 'night_shift_end', "TEXT NOT NULL DEFAULT '06:00'");
+addColumn('system_config', 'sleep_inactivity_mins', 'INTEGER NOT NULL DEFAULT 45');
+addColumn('system_config', 'low_battery_threshold', 'INTEGER NOT NULL DEFAULT 15');
+
+// Rebuild staff CHECK to permit the 'client' role on pre-existing databases.
+// Uses user_version as a one-shot migration guard.
+const USER_VERSION = db.pragma('user_version', { simple: true });
+if (USER_VERSION < 1) {
+  const staffCheck = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='staff'"
+  ).get();
+  if (staffCheck && staffCheck.sql && !staffCheck.sql.includes("'client'")) {
+    const rebuild = db.transaction(() => {
+      db.exec(`
+        CREATE TABLE staff_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          org_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
+          site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
+          name TEXT NOT NULL,
+          email TEXT NOT NULL UNIQUE,
+          password TEXT NOT NULL,
+          phone TEXT,
+          role TEXT NOT NULL DEFAULT 'staff' CHECK(role IN ('admin','staff','client')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO staff_new (id, org_id, site_id, name, email, password, phone, role, created_at)
+          SELECT id, org_id, site_id, name, email, password, phone, role, created_at FROM staff;
+        DROP TABLE staff;
+        ALTER TABLE staff_new RENAME TO staff;
+        CREATE INDEX IF NOT EXISTS idx_staff_org_id ON staff(org_id);
+      `);
+    });
+    rebuild();
+  }
+  db.pragma('user_version = 1');
+}
 
 module.exports = db;

@@ -1,0 +1,152 @@
+// 24x7 Command Centre Routes - live operational board
+const express = require('express');
+const db = require('../db');
+const { authMiddleware } = require('../auth');
+const { createAlert } = require('../lib/alerts');
+
+const router = express.Router();
+
+const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+function haversine(lat1, lng1, lat2, lng2) {
+  if ([lat1, lng1, lat2, lng2].some(v => v == null)) return null;
+  const R = 6371e3, toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function shiftActiveNow(shift, now = new Date()) {
+  let days = [];
+  try { days = JSON.parse(shift.days_of_week || '[]'); } catch { days = []; }
+  if (!days.includes(DOW[now.getDay()])) return false;
+  const cur = now.getHours() * 60 + now.getMinutes();
+  const [sh, sm] = shift.start_time.split(':').map(Number);
+  const [eh, em] = shift.end_time.split(':').map(Number);
+  const s = sh * 60 + sm, e = eh * 60 + em;
+  if (s === e) return true;
+  return s < e ? (cur >= s && cur < e) : (cur >= s || cur < e);
+}
+
+function guardLiveStatus(guardId, config) {
+  const locs = db.prepare('SELECT lat, lng, battery, timestamp FROM guard_locations WHERE guard_id = ? ORDER BY timestamp DESC LIMIT 2').all(guardId);
+  if (!locs.length) return { status: 'online', battery: null, lastPing: null, km: null };
+  const minsSince = (Date.now() - new Date(locs[0].timestamp + 'Z').getTime()) / 60000;
+  let status = 'online';
+  if (minsSince > (config.idle_threshold_mins || 35)) status = 'idle';
+  else if (locs.length >= 2) {
+    const d = haversine(locs[0].lat, locs[0].lng, locs[1].lat, locs[1].lng);
+    if (d != null && d < (config.idle_distance_meters || 50)) status = 'idle';
+  }
+  return { status, battery: locs[0].battery, lastPing: locs[0].timestamp };
+}
+
+// GET /api/command/live - full live board (sites, shortages, alerts, incidents)
+router.get('/live', authMiddleware, (req, res) => {
+  try {
+    const config = db.prepare('SELECT * FROM system_config WHERE id = 1').get() || {};
+    const now = new Date();
+
+    const sites = db.prepare('SELECT * FROM sites ORDER BY name').all();
+    const siteBoard = sites.map(site => {
+      const shifts = db.prepare('SELECT * FROM site_shifts WHERE site_id = ?').all(site.id);
+      const activeShifts = shifts.filter(s => shiftActiveNow(s, now));
+      const activeShiftIds = activeShifts.map(s => s.id);
+
+      // Required = active guards assigned to a shift that is active right now
+      let required = 0;
+      if (activeShiftIds.length) {
+        const placeholders = activeShiftIds.map(() => '?').join(',');
+        required = db.prepare(
+          `SELECT COUNT(*) AS c FROM guards WHERE approval_status = 'active' AND shift_id IN (${placeholders})`
+        ).get(...activeShiftIds).c;
+      }
+
+      const onDuty = db.prepare(
+        "SELECT COUNT(*) AS c FROM guards WHERE approval_status = 'active' AND site_id = ? AND clocked_in = 1"
+      ).get(site.id).c;
+
+      const shortage = Math.max(0, required - onDuty);
+
+      return {
+        site_id: site.id, site_name: site.name, address: site.address,
+        activeShifts: activeShifts.map(s => s.label),
+        required, onDuty, shortage,
+      };
+    });
+
+    // Live guard roster (clocked-in)
+    const clockedIn = db.prepare(`
+      SELECT g.id, g.name, g.site_id, s.name AS site_name FROM guards g
+      LEFT JOIN sites s ON s.id = g.site_id
+      WHERE g.clocked_in = 1 AND g.approval_status = 'active'
+    `).all();
+    const roster = clockedIn.map(g => ({ ...g, ...guardLiveStatus(g.id, config) }));
+
+    // Alerts + incidents
+    const activeAlerts = db.prepare("SELECT COUNT(*) AS c FROM alerts WHERE status = 'active'").get().c;
+    const criticalAlerts = db.prepare("SELECT COUNT(*) AS c FROM alerts WHERE status = 'active' AND severity = 'critical'").get().c;
+    const openIncidents = db.prepare("SELECT COUNT(*) AS c FROM incidents WHERE status = 'open'").get().c;
+    const openSos = db.prepare("SELECT COUNT(*) AS c FROM incidents WHERE status = 'open' AND type = 'sos'").get().c;
+    const recentAlerts = db.prepare(`
+      SELECT a.*, g.name AS guard_name, s.name AS site_name FROM alerts a
+      LEFT JOIN guards g ON g.id = a.guard_id LEFT JOIN sites s ON s.id = a.site_id
+      WHERE a.status = 'active' ORDER BY a.created_at DESC LIMIT 20
+    `).all();
+
+    const totalShortage = siteBoard.reduce((s, x) => s + x.shortage, 0);
+    const lowBattery = roster.filter(r => r.battery != null && r.battery <= (config.low_battery_threshold || 15)).length;
+
+    res.json({
+      success: true,
+      data: {
+        generatedAt: now.toISOString(),
+        summary: {
+          sites: sites.length,
+          onDuty: roster.length,
+          online: roster.filter(r => r.status === 'online').length,
+          idle: roster.filter(r => r.status === 'idle').length,
+          totalShortage,
+          activeAlerts, criticalAlerts, openIncidents, openSos, lowBattery,
+        },
+        sites: siteBoard,
+        roster,
+        recentAlerts: recentAlerts.map(a => ({ ...a, meta: a.meta ? JSON.parse(a.meta) : null })),
+      }
+    });
+  } catch (err) {
+    console.error('Command live error:', err);
+    res.status(500).json({ success: false, error: 'Failed to build live board' });
+  }
+});
+
+// POST /api/command/scan-shortages - evaluate shortages and raise alerts (idempotent)
+router.post('/scan-shortages', authMiddleware, (req, res) => {
+  try {
+    const now = new Date();
+    const sites = db.prepare('SELECT * FROM sites').all();
+    let raised = 0;
+    for (const site of sites) {
+      const shifts = db.prepare('SELECT * FROM site_shifts WHERE site_id = ?').all(site.id).filter(s => shiftActiveNow(s, now));
+      const ids = shifts.map(s => s.id);
+      if (!ids.length) continue;
+      const placeholders = ids.map(() => '?').join(',');
+      const required = db.prepare(`SELECT COUNT(*) AS c FROM guards WHERE approval_status='active' AND shift_id IN (${placeholders})`).get(...ids).c;
+      const onDuty = db.prepare("SELECT COUNT(*) AS c FROM guards WHERE approval_status='active' AND site_id=? AND clocked_in=1").get(site.id).c;
+      const shortage = required - onDuty;
+      if (shortage > 0) {
+        if (createAlert({
+          orgId: site.org_id, siteId: site.id, type: 'shortage',
+          severity: shortage >= 2 ? 'high' : 'medium',
+          message: `Guard shortage at ${site.name}: ${onDuty}/${required} on duty (${shortage} short)`,
+          meta: { required, onDuty, shortage },
+        })) raised++;
+      }
+    }
+    res.json({ success: true, data: { raised }, message: `${raised} shortage alert(s) raised` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to scan shortages' });
+  }
+});
+
+module.exports = router;

@@ -226,19 +226,26 @@ router.patch('/:id', authMiddleware, requireRole('admin', 'staff'), (req, res) =
 // PUT /api/guards/:id - Update guard details
 router.put('/:id', authMiddleware, requireRole('admin'), (req, res) => {
   try {
-    const { name, phone, email, siteId, shiftId, dailyRate, employeeId, approvalStatus } = req.body;
-    
+    const { name, phone, email, siteId, shiftId, dailyRate, employeeId, approvalStatus,
+      aadhaarNumber, panNumber, epfNumber, bankAccount, bankIfsc, pasaraNumber, kycVerified } = req.body;
+
     const guard = db.prepare('SELECT * FROM guards WHERE id = ?').get(req.params.id);
     if (!guard) return res.status(404).json({ success: false, error: 'Guard not found' });
 
     db.prepare(`
-      UPDATE guards SET 
+      UPDATE guards SET
         name = COALESCE(?, name), phone = COALESCE(?, phone), email = COALESCE(?, email),
         site_id = COALESCE(?, site_id), shift_id = COALESCE(?, shift_id),
         daily_rate = COALESCE(?, daily_rate), employee_id = COALESCE(?, employee_id),
-        approval_status = COALESCE(?, approval_status), updated_at = datetime('now')
+        approval_status = COALESCE(?, approval_status),
+        aadhaar_number = COALESCE(?, aadhaar_number), pan_number = COALESCE(?, pan_number),
+        epf_number = COALESCE(?, epf_number), bank_account = COALESCE(?, bank_account),
+        bank_ifsc = COALESCE(?, bank_ifsc), pasara_number = COALESCE(?, pasara_number),
+        kyc_verified = COALESCE(?, kyc_verified), updated_at = datetime('now')
       WHERE id = ?
-    `).run(name, phone, email, siteId, shiftId, dailyRate, employeeId, approvalStatus, req.params.id);
+    `).run(name, phone, email, siteId, shiftId, dailyRate, employeeId, approvalStatus,
+      aadhaarNumber, panNumber, epfNumber, bankAccount, bankIfsc, pasaraNumber,
+      kycVerified === undefined ? null : (kycVerified ? 1 : 0), req.params.id);
 
     res.json({ success: true, message: 'Guard updated' });
   } catch (err) {

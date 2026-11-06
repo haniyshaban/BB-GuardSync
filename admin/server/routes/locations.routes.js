@@ -9,7 +9,7 @@ const router = express.Router();
 router.post('/', authMiddleware, (req, res) => {
   try {
     const guardId = req.user.role === 'guard' ? req.user.id : req.body.guardId;
-    const { lat, lng, accuracy } = req.body;
+    const { lat, lng, accuracy, battery } = req.body;
 
     if (lat == null || lng == null) {
       return res.status(400).json({ success: false, error: 'Latitude and longitude are required' });
@@ -22,8 +22,8 @@ router.post('/', authMiddleware, (req, res) => {
     }
 
     db.prepare(
-      'INSERT INTO guard_locations (guard_id, lat, lng, accuracy) VALUES (?, ?, ?, ?)'
-    ).run(guardId, lat, lng, accuracy || null);
+      'INSERT INTO guard_locations (guard_id, lat, lng, accuracy, battery) VALUES (?, ?, ?, ?, ?)'
+    ).run(guardId, lat, lng, accuracy || null, battery == null ? null : Math.round(battery));
 
     res.json({ success: true, message: 'Location recorded' });
   } catch (err) {

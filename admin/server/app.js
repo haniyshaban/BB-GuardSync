@@ -52,6 +52,16 @@ app.use('/api/payroll', require('./routes/payroll.routes'));
 app.use('/api/staff', require('./routes/staff.routes'));
 app.use('/api/stats', require('./routes/stats.routes'));
 app.use('/api/config', require('./routes/config.routes'));
+// Raksham modules
+app.use('/api/overtime', require('./routes/overtime.routes'));
+app.use('/api/assets', require('./routes/assets.routes'));
+app.use('/api/documents', require('./routes/documents.routes'));
+app.use('/api/tasks', require('./routes/tasks.routes'));
+app.use('/api/incidents', require('./routes/incidents.routes'));
+app.use('/api/alerts', require('./routes/alerts.routes'));
+app.use('/api/patrol', require('./routes/patrol.routes'));
+app.use('/api/command', require('./routes/command.routes'));
+app.use('/api/client', require('./routes/client.routes'));
 
 // Health check
 app.get('/api/health', (req, res) => {
