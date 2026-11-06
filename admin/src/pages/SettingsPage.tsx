@@ -33,6 +33,12 @@ export default function SettingsPage() {
     dataRetentionDays: 30,
     idleThresholdMins: 35,
     idleDistanceMeters: 50,
+    otDailyThresholdHours: 9,
+    otWeeklyThresholdHours: 48,
+    nightShiftStart: '22:00',
+    nightShiftEnd: '06:00',
+    sleepInactivityMins: 45,
+    lowBatteryThreshold: 15,
   });
 
   const [originalForm, setOriginalForm] = useState(form);
@@ -84,6 +90,12 @@ export default function SettingsPage() {
         dataRetentionDays: c.data_retention_days,
         idleThresholdMins: c.idle_threshold_mins,
         idleDistanceMeters: c.idle_distance_meters,
+        otDailyThresholdHours: c.ot_daily_threshold_hours ?? 9,
+        otWeeklyThresholdHours: c.ot_weekly_threshold_hours ?? 48,
+        nightShiftStart: c.night_shift_start ?? '22:00',
+        nightShiftEnd: c.night_shift_end ?? '06:00',
+        sleepInactivityMins: c.sleep_inactivity_mins ?? 45,
+        lowBatteryThreshold: c.low_battery_threshold ?? 15,
       };
       setForm(newForm);
       setOriginalForm(newForm);
@@ -218,6 +230,60 @@ export default function SettingsPage() {
             </div>
           </div>
           <p className="text-xs text-gray-400 mt-2">Random face verification checks are scheduled between these min/max values each day when a guard clocks in</p>
+        </div>
+
+        <hr />
+
+        <div>
+          <h2 className="font-semibold text-gray-900 mb-4">Overtime</h2>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Daily OT threshold (hours)</label>
+              <input type="number" step="0.5" value={form.otDailyThresholdHours}
+                onChange={(e) => setForm({ ...form, otDailyThresholdHours: Number(e.target.value) })}
+                className="w-full px-3 py-2 border rounded-lg" min={1} max={24} />
+              <p className="text-xs text-gray-400 mt-1">Hours beyond this per shift count as overtime</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Weekly OT threshold (hours)</label>
+              <input type="number" value={form.otWeeklyThresholdHours}
+                onChange={(e) => setForm({ ...form, otWeeklyThresholdHours: Number(e.target.value) })}
+                className="w-full px-3 py-2 border rounded-lg" min={1} max={168} />
+            </div>
+          </div>
+        </div>
+
+        <hr />
+
+        <div>
+          <h2 className="font-semibold text-gray-900 mb-4">Night-shift Monitoring & Alerts</h2>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Night shift start</label>
+              <input type="time" value={form.nightShiftStart}
+                onChange={(e) => setForm({ ...form, nightShiftStart: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Night shift end</label>
+              <input type="time" value={form.nightShiftEnd}
+                onChange={(e) => setForm({ ...form, nightShiftEnd: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sleep-alert inactivity (minutes)</label>
+              <input type="number" value={form.sleepInactivityMins}
+                onChange={(e) => setForm({ ...form, sleepInactivityMins: Number(e.target.value) })}
+                className="w-full px-3 py-2 border rounded-lg" min={10} max={180} />
+              <p className="text-xs text-gray-400 mt-1">Flag a night-shift guard with no movement/response for this long</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Low-battery threshold (%)</label>
+              <input type="number" value={form.lowBatteryThreshold}
+                onChange={(e) => setForm({ ...form, lowBatteryThreshold: Number(e.target.value) })}
+                className="w-full px-3 py-2 border rounded-lg" min={1} max={100} />
+            </div>
+          </div>
         </div>
 
         <button onClick={handleSaveClick} disabled={!hasChanges || !isGpsIntervalValid || saveMut.isPending}

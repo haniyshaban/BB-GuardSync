@@ -2,15 +2,24 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   LayoutDashboard, Users, Building2, ClipboardCheck,
-  DollarSign, Settings, LogOut, X,
+  DollarSign, Settings, LogOut, X, Radio, Route, ClipboardList,
+  AlertOctagon, Bell, Clock, Package, Eye,
 } from 'lucide-react';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/command', icon: Radio, label: 'Command Centre' },
   { to: '/guards', icon: Users, label: 'Guards' },
   { to: '/sites', icon: Building2, label: 'Sites' },
   { to: '/attendance', icon: ClipboardCheck, label: 'Attendance' },
+  { to: '/patrol', icon: Route, label: 'Patrolling' },
+  { to: '/tasks', icon: ClipboardList, label: 'Tasks' },
+  { to: '/incidents', icon: AlertOctagon, label: 'Incidents & SOS' },
+  { to: '/alerts', icon: Bell, label: 'Alerts' },
+  { to: '/overtime', icon: Clock, label: 'Overtime' },
+  { to: '/assets', icon: Package, label: 'Assets' },
   { to: '/payroll', icon: DollarSign, label: 'Payroll' },
+  { to: '/clients', icon: Eye, label: 'Client Access' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 

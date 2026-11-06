@@ -7,6 +7,9 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Shared form input */
+.input { @apply w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400; }
+
 /* Status badges */
 .status-online { @apply bg-green-100 text-green-800; }
 .status-offline { @apply bg-gray-100 text-gray-600; }

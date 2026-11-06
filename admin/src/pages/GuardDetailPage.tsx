@@ -116,6 +116,9 @@ export default function GuardDetailPage() {
         </div>
       </div>
 
+      {/* KYC & statutory documents */}
+      <GuardKyc guardId={id!} guard={guard} />
+
       {/* Tabs */}
       <div className="border-b border-gray-200">
         <div className="flex gap-6">
@@ -290,6 +293,86 @@ function DeleteGuardDialog({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+const DOC_TYPES = [
+  { key: 'aadhaar', label: 'Aadhaar' },
+  { key: 'pan', label: 'PAN' },
+  { key: 'epf', label: 'EPF / UAN' },
+  { key: 'bank', label: 'Bank account' },
+  { key: 'pasara', label: 'PASARA licence' },
+  { key: 'police_verification', label: 'Police verification' },
+];
+
+function GuardKyc({ guardId, guard }: { guardId: string; guard: any }) {
+  const qc = useQueryClient();
+  const [adding, setAdding] = useState(false);
+  const [doc, setDoc] = useState({ docType: 'aadhaar', docNumber: '', fileUrl: '' });
+
+  const { data: docsRes } = useQuery({
+    queryKey: ['guard-documents', guardId],
+    queryFn: () => api(`/documents/guard/${guardId}`),
+  });
+
+  const addMut = useMutation({
+    mutationFn: () => api('/documents', { method: 'POST', body: JSON.stringify({ guardId: Number(guardId), ...doc }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['guard-documents', guardId] }); setAdding(false); setDoc({ docType: 'aadhaar', docNumber: '', fileUrl: '' }); },
+    onError: (e: any) => alert(e.message),
+  });
+  const verifyMut = useMutation({
+    mutationFn: ({ id, verified }: any) => api(`/documents/${id}/verify`, { method: 'PUT', body: JSON.stringify({ verified }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['guard-documents', guardId] }); qc.invalidateQueries({ queryKey: ['guard', guardId] }); },
+  });
+
+  const docs = docsRes?.data || [];
+
+  return (
+    <div className="bg-white rounded-xl border p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-gray-900">KYC & Documents</h2>
+        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${guard.kyc_verified ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+          {guard.kyc_verified ? 'KYC verified' : 'KYC pending'}
+        </span>
+      </div>
+
+      <div className="divide-y divide-gray-100">
+        {docs.length === 0 ? <p className="text-sm text-gray-500 py-2">No documents on file.</p>
+        : docs.map((d: any) => {
+          const meta = DOC_TYPES.find(t => t.key === d.doc_type);
+          return (
+            <div key={d.id} className="py-2 flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-gray-900">{meta?.label || d.doc_type}{d.doc_number ? ` · ${d.doc_number}` : ''}</div>
+                <div className="text-xs text-gray-400">{d.file_url ? <a href={d.file_url} target="_blank" rel="noreferrer" className="text-blue-500 underline">file</a> : 'no file'}{d.verified_by_name ? ` · verified by ${d.verified_by_name}` : ''}</div>
+              </div>
+              <button onClick={() => verifyMut.mutate({ id: d.id, verified: !d.verified })}
+                className={`text-xs px-2.5 py-1 rounded-lg font-medium ${d.verified ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {d.verified ? '✓ Verified' : 'Mark verified'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {adding ? (
+        <div className="space-y-2 pt-2 border-t">
+          <div className="grid grid-cols-2 gap-2">
+            <select value={doc.docType} onChange={e => setDoc({ ...doc, docType: e.target.value })} className="input bg-white">
+              {DOC_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </select>
+            <input placeholder="Number" value={doc.docNumber} onChange={e => setDoc({ ...doc, docNumber: e.target.value })} className="input" />
+          </div>
+          <input placeholder="File URL (optional)" value={doc.fileUrl} onChange={e => setDoc({ ...doc, fileUrl: e.target.value })} className="input" />
+          <div className="flex gap-2">
+            <button onClick={() => addMut.mutate()} disabled={addMut.isPending} className="flex-1 py-2 bg-gray-900 text-white rounded-lg text-sm disabled:opacity-50">Add document</button>
+            <button onClick={() => setAdding(false)} className="px-4 py-2 border rounded-lg text-sm">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} className="text-sm text-gray-600 hover:text-gray-900 font-medium">+ Add document</button>
+      )}
     </div>
   );
 }
