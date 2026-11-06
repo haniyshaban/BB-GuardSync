@@ -2,6 +2,7 @@
 const express = require('express');
 const db = require('../db');
 const { authMiddleware, requireRole } = require('../auth');
+const { encryptPII, maskPII, decryptPII } = require('../lib/crypto');
 
 const router = express.Router();
 
@@ -15,7 +16,11 @@ router.get('/guard/:guardId', authMiddleware, requireRole('admin', 'staff'), (re
       FROM guard_documents d LEFT JOIN staff s ON s.id = d.verified_by
       WHERE d.guard_id = ? ORDER BY d.created_at DESC
     `).all(req.params.guardId);
-    res.json({ success: true, data: docs });
+
+    // Full numbers only on an explicit admin reveal (?reveal=1); masked otherwise.
+    const reveal = req.query.reveal === '1' && req.user.role === 'admin';
+    const view = docs.map(d => ({ ...d, doc_number: reveal ? decryptPII(d.doc_number) : maskPII(d.doc_number) }));
+    res.json({ success: true, data: view });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to list documents' });
   }
@@ -32,7 +37,7 @@ router.post('/', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
 
     const result = db.prepare(
       'INSERT INTO guard_documents (guard_id, doc_type, doc_number, file_url, notes) VALUES (?, ?, ?, ?, ?)'
-    ).run(guardId, docType, docNumber || null, fileUrl || null, notes || null);
+    ).run(guardId, docType, docNumber ? encryptPII(docNumber) : null, fileUrl || null, notes || null);
     res.status(201).json({ success: true, data: { id: result.lastInsertRowid }, message: 'Document added' });
   } catch (err) {
     console.error('Add document error:', err);
@@ -71,7 +76,7 @@ router.put('/:id', authMiddleware, requireRole('admin', 'staff'), (req, res) => 
   try {
     const { docNumber, fileUrl, notes } = req.body;
     db.prepare('UPDATE guard_documents SET doc_number = COALESCE(?, doc_number), file_url = COALESCE(?, file_url), notes = COALESCE(?, notes) WHERE id = ?')
-      .run(docNumber, fileUrl, notes, req.params.id);
+      .run(docNumber == null ? null : encryptPII(docNumber), fileUrl, notes, req.params.id);
     res.json({ success: true, message: 'Document updated' });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to update document' });

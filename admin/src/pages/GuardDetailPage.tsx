@@ -309,11 +309,12 @@ const DOC_TYPES = [
 function GuardKyc({ guardId, guard }: { guardId: string; guard: any }) {
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
+  const [reveal, setReveal] = useState(false);
   const [doc, setDoc] = useState({ docType: 'aadhaar', docNumber: '', fileUrl: '' });
 
   const { data: docsRes } = useQuery({
-    queryKey: ['guard-documents', guardId],
-    queryFn: () => api(`/documents/guard/${guardId}`),
+    queryKey: ['guard-documents', guardId, reveal],
+    queryFn: () => api(`/documents/guard/${guardId}${reveal ? '?reveal=1' : ''}`),
   });
 
   const addMut = useMutation({
@@ -332,9 +333,14 @@ function GuardKyc({ guardId, guard }: { guardId: string; guard: any }) {
     <div className="bg-white rounded-xl border p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-gray-900">KYC & Documents</h2>
-        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${guard.kyc_verified ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-          {guard.kyc_verified ? 'KYC verified' : 'KYC pending'}
-        </span>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setReveal(r => !r)} className="text-xs px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600">
+            {reveal ? 'Hide numbers' : 'Reveal numbers'}
+          </button>
+          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${guard.kyc_verified ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+            {guard.kyc_verified ? 'KYC verified' : 'KYC pending'}
+          </span>
+        </div>
       </div>
 
       <div className="divide-y divide-gray-100">

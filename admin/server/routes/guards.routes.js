@@ -3,6 +3,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { authMiddleware, requireRole } = require('../auth');
+const { encryptPII, viewGuardPII } = require('../lib/crypto');
 const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
@@ -109,7 +110,7 @@ router.get('/', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
     let guardsWithStatus = guards.map(g => {
       const { password: _, ...guard } = g;
       guard.status = computeStatus(g, config);
-      return guard;
+      return viewGuardPII(guard); // mask Aadhaar/PAN/EPF/bank in list view
     });
 
     // Filter by computed status if requested
@@ -125,13 +126,13 @@ router.get('/', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
 });
 
 // GET /api/guards/:id - Get single guard (admin/staff)
-router.get('/:id', authMiddleware, (req, res) => {
+router.get('/:id', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const guard = db.prepare(`
-      SELECT g.*, s.name as site_name, sh.label as shift_label 
-      FROM guards g 
-      LEFT JOIN sites s ON g.site_id = s.id 
-      LEFT JOIN site_shifts sh ON g.shift_id = sh.id 
+      SELECT g.*, s.name as site_name, sh.label as shift_label
+      FROM guards g
+      LEFT JOIN sites s ON g.site_id = s.id
+      LEFT JOIN site_shifts sh ON g.shift_id = sh.id
       WHERE g.id = ?
     `).get(req.params.id);
 
@@ -143,7 +144,9 @@ router.get('/:id', authMiddleware, (req, res) => {
     const { password: _, ...guardData } = guard;
     guardData.status = computeStatus(guard, config);
 
-    res.json({ success: true, data: guardData });
+    // Full PII only on an explicit admin reveal (?reveal=1); masked otherwise.
+    const reveal = req.query.reveal === '1' && req.user.role === 'admin';
+    res.json({ success: true, data: viewGuardPII(guardData, { reveal }) });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to get guard' });
   }
@@ -244,7 +247,11 @@ router.put('/:id', authMiddleware, requireRole('admin'), (req, res) => {
         kyc_verified = COALESCE(?, kyc_verified), updated_at = datetime('now')
       WHERE id = ?
     `).run(name, phone, email, siteId, shiftId, dailyRate, employeeId, approvalStatus,
-      aadhaarNumber, panNumber, epfNumber, bankAccount, bankIfsc, pasaraNumber,
+      aadhaarNumber == null ? null : encryptPII(aadhaarNumber),
+      panNumber == null ? null : encryptPII(panNumber),
+      epfNumber == null ? null : encryptPII(epfNumber),
+      bankAccount == null ? null : encryptPII(bankAccount),
+      bankIfsc, pasaraNumber,
       kycVerified === undefined ? null : (kycVerified ? 1 : 0), req.params.id);
 
     res.json({ success: true, message: 'Guard updated' });
