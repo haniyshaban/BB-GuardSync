@@ -86,9 +86,17 @@ export function GeofenceEditor({ site, siteId, guards = [] }: { site: any; siteI
   const save = useMutation({
     mutationFn: () => {
       const body: any = { geofenceType: mode, geofenceEnabled: enabled };
-      if (centre) { body.lat = centre.lat; body.lng = centre.lng; }
-      if (mode === 'radius') body.geofenceRadiusM = radius;
-      else body.geofencePolygon = points;
+      if (mode === 'radius') {
+        if (centre) { body.lat = centre.lat; body.lng = centre.lng; }
+        body.geofenceRadiusM = radius;
+      } else {
+        body.geofencePolygon = points;
+        // Keep the site pin on the drawn area so maps and distances stay consistent.
+        if (points.length >= 3) {
+          body.lat = points.reduce((s, p) => s + p.lat, 0) / points.length;
+          body.lng = points.reduce((s, p) => s + p.lng, 0) / points.length;
+        }
+      }
       return api(`/sites/${siteId}`, { method: 'PUT', body: JSON.stringify(body) });
     },
     onSuccess: () => {
