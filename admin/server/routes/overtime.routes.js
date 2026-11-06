@@ -13,7 +13,7 @@ function getConfig() {
 
 // GET /api/overtime?from=YYYY-MM-DD&to=YYYY-MM-DD&siteId=
 // Returns per-record overtime plus per-guard summary.
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const cfg = getConfig();
     const dailyThreshold = cfg.ot_daily_threshold_hours;

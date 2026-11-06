@@ -6,7 +6,7 @@ const { authMiddleware, requireRole } = require('../auth');
 const router = express.Router();
 
 // GET /api/alerts?status=active&type=&siteId=&limit=
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const { status, type, siteId } = req.query;
     const limit = Math.min(Number(req.query.limit) || 100, 500);
@@ -34,7 +34,7 @@ router.get('/', authMiddleware, (req, res) => {
 });
 
 // GET /api/alerts/count - active alert counts by severity (for header badge)
-router.get('/count', authMiddleware, (req, res) => {
+router.get('/count', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const total = db.prepare("SELECT COUNT(*) AS c FROM alerts WHERE status = 'active'").get().c;
     const critical = db.prepare("SELECT COUNT(*) AS c FROM alerts WHERE status = 'active' AND severity = 'critical'").get().c;

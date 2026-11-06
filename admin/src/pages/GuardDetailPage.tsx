@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, statusColor, formatDate, formatDateTime } from '@/lib/utils';
+import { api, statusColor, formatDate, formatDateTime, safeHref } from '@/lib/utils';
 import { ArrowLeft, Phone, Mail, Building2, Clock, DollarSign, AlertTriangle, MapPin } from 'lucide-react';
 import { useState } from 'react';
 
@@ -345,7 +345,7 @@ function GuardKyc({ guardId, guard }: { guardId: string; guard: any }) {
             <div key={d.id} className="py-2 flex items-center justify-between">
               <div>
                 <div className="text-sm font-medium text-gray-900">{meta?.label || d.doc_type}{d.doc_number ? ` · ${d.doc_number}` : ''}</div>
-                <div className="text-xs text-gray-400">{d.file_url ? <a href={d.file_url} target="_blank" rel="noreferrer" className="text-blue-500 underline">file</a> : 'no file'}{d.verified_by_name ? ` · verified by ${d.verified_by_name}` : ''}</div>
+                <div className="text-xs text-gray-400">{safeHref(d.file_url) ? <a href={safeHref(d.file_url)} target="_blank" rel="noreferrer" className="text-blue-500 underline">file</a> : 'no file'}{d.verified_by_name ? ` · verified by ${d.verified_by_name}` : ''}</div>
               </div>
               <button onClick={() => verifyMut.mutate({ id: d.id, verified: !d.verified })}
                 className={`text-xs px-2.5 py-1 rounded-lg font-medium ${d.verified ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>

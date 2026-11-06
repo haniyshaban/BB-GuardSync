@@ -18,7 +18,7 @@ function haversine(lat1, lon1, lat2, lon2) {
 // ---------- Checkpoints (admin) ----------
 
 // GET /api/patrol/sites/:siteId/checkpoints
-router.get('/sites/:siteId/checkpoints', authMiddleware, (req, res) => {
+router.get('/sites/:siteId/checkpoints', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const rows = db.prepare('SELECT * FROM checkpoints WHERE site_id = ? ORDER BY sort_order, id').all(req.params.siteId);
     res.json({ success: true, data: rows });
@@ -129,7 +129,7 @@ router.post('/scan', authMiddleware, (req, res) => {
 // ---------- Reporting (admin/staff) ----------
 
 // GET /api/patrol/scans?guardId=&siteId=&from=&to=  (route / scan history)
-router.get('/scans', authMiddleware, (req, res) => {
+router.get('/scans', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const { guardId, siteId, from, to } = req.query;
     const where = [], params = [];
@@ -154,7 +154,7 @@ router.get('/scans', authMiddleware, (req, res) => {
 });
 
 // GET /api/patrol/coverage/:siteId?date=YYYY-MM-DD - checkpoint coverage for a day
-router.get('/coverage/:siteId', authMiddleware, (req, res) => {
+router.get('/coverage/:siteId', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const date = req.query.date || new Date().toISOString().split('T')[0];
     const checkpoints = db.prepare('SELECT * FROM checkpoints WHERE site_id = ? AND is_active = 1 ORDER BY sort_order, id').all(req.params.siteId);

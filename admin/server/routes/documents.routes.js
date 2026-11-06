@@ -8,7 +8,7 @@ const router = express.Router();
 const DOC_TYPES = ['aadhaar', 'pan', 'epf', 'bank', 'pasara', 'police_verification', 'other'];
 
 // GET /api/documents/guard/:guardId - all documents for a guard
-router.get('/guard/:guardId', authMiddleware, (req, res) => {
+router.get('/guard/:guardId', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const docs = db.prepare(`
       SELECT d.*, s.name AS verified_by_name

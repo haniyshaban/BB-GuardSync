@@ -6,7 +6,7 @@ const { authMiddleware, requireRole } = require('../auth');
 const router = express.Router();
 
 // GET /api/assets - list assets with allocation summary
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const assets = db.prepare('SELECT * FROM assets ORDER BY name').all();
     const data = assets.map(a => {
@@ -23,7 +23,7 @@ router.get('/', authMiddleware, (req, res) => {
 });
 
 // GET /api/assets/summary - inventory totals
-router.get('/summary', authMiddleware, (req, res) => {
+router.get('/summary', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const totalAssets = db.prepare('SELECT COUNT(*) AS c FROM assets').get().c;
     const totalUnits = db.prepare('SELECT COALESCE(SUM(quantity),0) AS q FROM assets').get().q;
@@ -37,7 +37,7 @@ router.get('/summary', authMiddleware, (req, res) => {
 });
 
 // GET /api/assets/:id - asset with allocations
-router.get('/:id', authMiddleware, (req, res) => {
+router.get('/:id', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.id);
     if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
@@ -147,7 +147,7 @@ router.put('/allocations/:allocId', authMiddleware, requireRole('admin', 'staff'
 });
 
 // GET /api/assets/by-guard/:guardId - assets held by a guard
-router.get('/by-guard/:guardId', authMiddleware, (req, res) => {
+router.get('/by-guard/:guardId', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const rows = db.prepare(`
       SELECT al.*, a.name AS asset_name, a.category, a.asset_tag

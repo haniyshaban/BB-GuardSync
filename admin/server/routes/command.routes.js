@@ -1,7 +1,7 @@
 // 24x7 Command Centre Routes - live operational board
 const express = require('express');
 const db = require('../db');
-const { authMiddleware } = require('../auth');
+const { authMiddleware, requireRole } = require('../auth');
 const { createAlert } = require('../lib/alerts');
 
 const router = express.Router();
@@ -42,7 +42,7 @@ function guardLiveStatus(guardId, config) {
 }
 
 // GET /api/command/live - full live board (sites, shortages, alerts, incidents)
-router.get('/live', authMiddleware, (req, res) => {
+router.get('/live', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const config = db.prepare('SELECT * FROM system_config WHERE id = 1').get() || {};
     const now = new Date();
@@ -121,7 +121,7 @@ router.get('/live', authMiddleware, (req, res) => {
 });
 
 // GET /api/command/map - positioned guards + checkpoints for the live map
-router.get('/map', authMiddleware, (req, res) => {
+router.get('/map', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const config = db.prepare('SELECT * FROM system_config WHERE id = 1').get() || {};
     const clockedIn = db.prepare(`
@@ -156,7 +156,7 @@ router.get('/map', authMiddleware, (req, res) => {
 });
 
 // POST /api/command/scan-shortages - evaluate shortages and raise alerts (idempotent)
-router.post('/scan-shortages', authMiddleware, (req, res) => {
+router.post('/scan-shortages', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const now = new Date();
     const sites = db.prepare('SELECT * FROM sites').all();
