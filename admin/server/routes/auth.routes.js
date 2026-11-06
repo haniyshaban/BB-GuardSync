@@ -3,6 +3,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { generateToken } = require('../auth');
+const { viewGuardPII } = require('../lib/crypto');
 const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
@@ -62,7 +63,8 @@ router.post('/login', loginLimiter, (req, res) => {
       shiftLabel = shift?.label;
     }
 
-    const { password: _, face_descriptor, ...guardData } = guard;
+    const { password: _, face_descriptor, ...guardRow } = guard;
+    const guardData = viewGuardPII(guardRow); // mask own PII to last-4
     res.json({
       success: true,
       data: {
@@ -97,9 +99,9 @@ router.get('/me', require('../auth').authMiddleware, (req, res) => {
       return res.status(404).json({ success: false, error: 'Guard not found' });
     }
 
-    const { password: _, face_descriptor, site_name, shift_label, ...guardData } = guard;
+    const { password: _, face_descriptor, site_name, shift_label, ...guardRow } = guard;
     res.json({ success: true, data: {
-      ...guardData,
+      ...viewGuardPII(guardRow), // mask own PII to last-4
       siteName: site_name,
       shiftLabel: shift_label,
       hasFaceDescriptor: !!face_descriptor,

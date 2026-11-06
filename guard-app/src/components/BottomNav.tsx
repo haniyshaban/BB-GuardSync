@@ -1,8 +1,10 @@
 import { NavLink } from 'react-router-dom';
-import { Home, User, DollarSign } from 'lucide-react';
+import { Home, User, DollarSign, ClipboardList, MapPin } from 'lucide-react';
 
 const navItems = [
   { to: '/', icon: Home, label: 'Home' },
+  { to: '/tasks', icon: ClipboardList, label: 'Tasks' },
+  { to: '/patrol', icon: MapPin, label: 'Patrol' },
   { to: '/payslip', icon: DollarSign, label: 'Payslip' },
   { to: '/profile', icon: User, label: 'Profile' },
 ];

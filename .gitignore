@@ -72,3 +72,4 @@ ios/build/
 # Uploads
 admin/server/uploads/*
 !admin/server/uploads/.gitkeep
+*.tsbuildinfo

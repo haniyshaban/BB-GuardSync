@@ -60,8 +60,29 @@ export const guardApi = {
   getAttendance: (page = 1) => request(`/attendance?page=${page}&limit=20`),
 
   // Location
-  submitLocation: (lat: number, lng: number, accuracy?: number) =>
-    request('/locations', { method: 'POST', body: JSON.stringify({ lat, lng, accuracy }) }),
+  submitLocation: (lat: number, lng: number, accuracy?: number, battery?: number) =>
+    request('/locations', { method: 'POST', body: JSON.stringify({ lat, lng, accuracy, battery }) }),
+
+  // Incidents & SOS
+  reportIncident: (data: { category?: string; severity?: string; description?: string; photoUrl?: string; lat?: number; lng?: number }) =>
+    request('/incidents', { method: 'POST', body: JSON.stringify(data) }),
+
+  sendSos: (lat?: number, lng?: number, description?: string) =>
+    request('/incidents/sos', { method: 'POST', body: JSON.stringify({ lat, lng, description }) }),
+
+  getMyIncidents: () => request('/incidents/mine'),
+
+  // Tasks
+  getMyTasks: () => request('/tasks/mine'),
+
+  updateTaskStatus: (id: number, status: string, note?: string, photoUrl?: string) =>
+    request(`/tasks/${id}/status`, { method: 'PUT', body: JSON.stringify({ status, note, photoUrl }) }),
+
+  // Patrolling
+  getMyCheckpoints: () => request('/patrol/my-checkpoints'),
+
+  scanCheckpoint: (data: { checkpointId?: number; code?: string; lat?: number; lng?: number; photoUrl?: string }) =>
+    request('/patrol/scan', { method: 'POST', body: JSON.stringify(data) }),
 
   // Update own face descriptor (face enrollment from Profile)
   updateFace: (faceDescriptor: number[]) =>

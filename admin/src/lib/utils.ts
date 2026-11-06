@@ -68,6 +68,17 @@ export function statusColor(status: string): string {
   }
 }
 
+// Only allow http(s) links for user-supplied URLs (blocks javascript:/data: hrefs).
+export function safeHref(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const u = new URL(url, window.location.origin);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function downloadCSV(csvContent: string, filename: string) {
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);

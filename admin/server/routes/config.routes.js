@@ -18,7 +18,8 @@ router.get('/', authMiddleware, (req, res) => {
 // PUT /api/config
 router.put('/', authMiddleware, requireRole('admin'), (req, res) => {
   try {
-    const { locationUpdateIntervalMins, faceChecksPerDayMin, faceChecksPerDayMax, dataRetentionDays, idleThresholdMins, idleDistanceMeters } = req.body;
+    const { locationUpdateIntervalMins, faceChecksPerDayMin, faceChecksPerDayMax, dataRetentionDays, idleThresholdMins, idleDistanceMeters,
+      otDailyThresholdHours, otWeeklyThresholdHours, nightShiftStart, nightShiftEnd, sleepInactivityMins, lowBatteryThreshold } = req.body;
 
     db.prepare(`
       UPDATE system_config SET
@@ -27,9 +28,16 @@ router.put('/', authMiddleware, requireRole('admin'), (req, res) => {
         face_checks_per_day_max = COALESCE(?, face_checks_per_day_max),
         data_retention_days = COALESCE(?, data_retention_days),
         idle_threshold_mins = COALESCE(?, idle_threshold_mins),
-        idle_distance_meters = COALESCE(?, idle_distance_meters)
+        idle_distance_meters = COALESCE(?, idle_distance_meters),
+        ot_daily_threshold_hours = COALESCE(?, ot_daily_threshold_hours),
+        ot_weekly_threshold_hours = COALESCE(?, ot_weekly_threshold_hours),
+        night_shift_start = COALESCE(?, night_shift_start),
+        night_shift_end = COALESCE(?, night_shift_end),
+        sleep_inactivity_mins = COALESCE(?, sleep_inactivity_mins),
+        low_battery_threshold = COALESCE(?, low_battery_threshold)
       WHERE id = 1
-    `).run(locationUpdateIntervalMins, faceChecksPerDayMin, faceChecksPerDayMax, dataRetentionDays, idleThresholdMins, idleDistanceMeters);
+    `).run(locationUpdateIntervalMins, faceChecksPerDayMin, faceChecksPerDayMax, dataRetentionDays, idleThresholdMins, idleDistanceMeters,
+      otDailyThresholdHours, otWeeklyThresholdHours, nightShiftStart, nightShiftEnd, sleepInactivityMins, lowBatteryThreshold);
 
     res.json({ success: true, message: 'Configuration updated' });
   } catch (err) {

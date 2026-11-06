@@ -171,6 +171,61 @@ for (let dayOffset = 1; dayOffset <= 14; dayOffset++) {
 }
 console.log(`✓ Created ${attendanceCount} attendance records (last 14 days)`);
 
+// ============ RAKSHAM MODULE DEMO DATA ============
+
+// Assets
+const assetSeed = [
+  { name: 'Security Torch', category: 'Equipment', tag: 'TORCH-001', qty: 20, value: 350 },
+  { name: 'Walkie-Talkie', category: 'Comms', tag: 'WT-001', qty: 12, value: 2200 },
+  { name: 'Reflective Jacket', category: 'Uniform', tag: 'JKT-001', qty: 40, value: 450 },
+  { name: 'Metal Detector', category: 'Equipment', tag: 'MD-001', qty: 6, value: 3500 },
+];
+const insAsset = db.prepare('INSERT OR IGNORE INTO assets (name, category, asset_tag, quantity, unit_value) VALUES (?, ?, ?, ?, ?)');
+let assetCount = 0;
+for (const a of assetSeed) {
+  if (!db.prepare('SELECT id FROM assets WHERE asset_tag = ?').get(a.tag)) {
+    insAsset.run(a.name, a.category, a.tag, a.qty, a.value); assetCount++;
+  }
+}
+console.log(`✓ Created ${assetCount} assets`);
+
+// Checkpoints (3 per site)
+const insCp = db.prepare('INSERT INTO checkpoints (site_id, label, code, lat, lng, radius_meters, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)');
+let cpCount = 0;
+for (const siteId of siteIds) {
+  if (db.prepare('SELECT id FROM checkpoints WHERE site_id = ?').get(siteId)) continue;
+  ['Main Gate', 'Rear Exit', 'Parking'].forEach((label, idx) => {
+    insCp.run(siteId, label, `CP-${siteId}-${idx + 1}`, 12.9 + Math.random() * 0.1, 77.5 + Math.random() * 0.1, 50, idx);
+    cpCount++;
+  });
+}
+console.log(`✓ Created ${cpCount} checkpoints`);
+
+// A few tasks
+const insTask = db.prepare('INSERT INTO tasks (guard_id, site_id, title, description, priority, status) VALUES (?, ?, ?, ?, ?, ?)');
+let taskCount = 0;
+if (!db.prepare('SELECT id FROM tasks LIMIT 1').get() && activeGuards.length) {
+  const samples = [
+    ['Inspect fire extinguishers', 'Check all extinguishers on ground floor', 'high', 'open'],
+    ['Log visitor register', 'Ensure visitor book is up to date', 'normal', 'open'],
+    ['Perimeter check', 'Walk full perimeter and report issues', 'normal', 'in_progress'],
+  ];
+  samples.forEach((s, i) => {
+    const g = activeGuards[i % activeGuards.length];
+    insTask.run(g.id, g.site_id, s[0], s[1], s[2], s[3]); taskCount++;
+  });
+}
+console.log(`✓ Created ${taskCount} tasks`);
+
+// Client account + site access
+if (!db.prepare("SELECT id FROM staff WHERE email = 'client@blackbelt.app'").get()) {
+  const r = db.prepare('INSERT INTO staff (name, email, password, phone, role, site_id) VALUES (?, ?, ?, ?, ?, ?)')
+    .run('Demo Client', 'client@blackbelt.app', hash('client123'), '9200000009', 'client', siteIds[0]);
+  db.prepare('INSERT OR IGNORE INTO client_sites (staff_id, site_id) VALUES (?, ?)').run(r.lastInsertRowid, siteIds[0]);
+  if (siteIds[1]) db.prepare('INSERT OR IGNORE INTO client_sites (staff_id, site_id) VALUES (?, ?)').run(r.lastInsertRowid, siteIds[1]);
+  console.log('✓ Created demo client account');
+}
+
 console.log('\n⬛ Seed complete!');
 console.log('  Admin login: admin@blackbelt.app / admin123');
 console.log('  Staff login (Whitefield): staff.whitefield@blackbelt.app / staff123');

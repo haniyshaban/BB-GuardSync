@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, CalendarCheck, LogOut, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarCheck, LogOut, AlertCircle, Bell } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 
@@ -8,6 +8,7 @@ const links = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/guards', icon: Users, label: 'Guards' },
   { to: '/attendance', icon: CalendarCheck, label: 'Attendance' },
+  { to: '/alerts', icon: Bell, label: 'Alerts & SOS' },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {

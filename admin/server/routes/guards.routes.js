@@ -3,6 +3,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { authMiddleware, requireRole } = require('../auth');
+const { encryptPII, viewGuardPII } = require('../lib/crypto');
 const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
@@ -109,7 +110,7 @@ router.get('/', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
     let guardsWithStatus = guards.map(g => {
       const { password: _, ...guard } = g;
       guard.status = computeStatus(g, config);
-      return guard;
+      return viewGuardPII(guard); // mask Aadhaar/PAN/EPF/bank in list view
     });
 
     // Filter by computed status if requested
@@ -125,13 +126,13 @@ router.get('/', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
 });
 
 // GET /api/guards/:id - Get single guard (admin/staff)
-router.get('/:id', authMiddleware, (req, res) => {
+router.get('/:id', authMiddleware, requireRole('admin', 'staff'), (req, res) => {
   try {
     const guard = db.prepare(`
-      SELECT g.*, s.name as site_name, sh.label as shift_label 
-      FROM guards g 
-      LEFT JOIN sites s ON g.site_id = s.id 
-      LEFT JOIN site_shifts sh ON g.shift_id = sh.id 
+      SELECT g.*, s.name as site_name, sh.label as shift_label
+      FROM guards g
+      LEFT JOIN sites s ON g.site_id = s.id
+      LEFT JOIN site_shifts sh ON g.shift_id = sh.id
       WHERE g.id = ?
     `).get(req.params.id);
 
@@ -143,7 +144,9 @@ router.get('/:id', authMiddleware, (req, res) => {
     const { password: _, ...guardData } = guard;
     guardData.status = computeStatus(guard, config);
 
-    res.json({ success: true, data: guardData });
+    // Full PII only on an explicit admin reveal (?reveal=1); masked otherwise.
+    const reveal = req.query.reveal === '1' && req.user.role === 'admin';
+    res.json({ success: true, data: viewGuardPII(guardData, { reveal }) });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to get guard' });
   }
@@ -226,19 +229,30 @@ router.patch('/:id', authMiddleware, requireRole('admin', 'staff'), (req, res) =
 // PUT /api/guards/:id - Update guard details
 router.put('/:id', authMiddleware, requireRole('admin'), (req, res) => {
   try {
-    const { name, phone, email, siteId, shiftId, dailyRate, employeeId, approvalStatus } = req.body;
-    
+    const { name, phone, email, siteId, shiftId, dailyRate, employeeId, approvalStatus,
+      aadhaarNumber, panNumber, epfNumber, bankAccount, bankIfsc, pasaraNumber, kycVerified } = req.body;
+
     const guard = db.prepare('SELECT * FROM guards WHERE id = ?').get(req.params.id);
     if (!guard) return res.status(404).json({ success: false, error: 'Guard not found' });
 
     db.prepare(`
-      UPDATE guards SET 
+      UPDATE guards SET
         name = COALESCE(?, name), phone = COALESCE(?, phone), email = COALESCE(?, email),
         site_id = COALESCE(?, site_id), shift_id = COALESCE(?, shift_id),
         daily_rate = COALESCE(?, daily_rate), employee_id = COALESCE(?, employee_id),
-        approval_status = COALESCE(?, approval_status), updated_at = datetime('now')
+        approval_status = COALESCE(?, approval_status),
+        aadhaar_number = COALESCE(?, aadhaar_number), pan_number = COALESCE(?, pan_number),
+        epf_number = COALESCE(?, epf_number), bank_account = COALESCE(?, bank_account),
+        bank_ifsc = COALESCE(?, bank_ifsc), pasara_number = COALESCE(?, pasara_number),
+        kyc_verified = COALESCE(?, kyc_verified), updated_at = datetime('now')
       WHERE id = ?
-    `).run(name, phone, email, siteId, shiftId, dailyRate, employeeId, approvalStatus, req.params.id);
+    `).run(name, phone, email, siteId, shiftId, dailyRate, employeeId, approvalStatus,
+      aadhaarNumber == null ? null : encryptPII(aadhaarNumber),
+      panNumber == null ? null : encryptPII(panNumber),
+      epfNumber == null ? null : encryptPII(epfNumber),
+      bankAccount == null ? null : encryptPII(bankAccount),
+      bankIfsc, pasaraNumber,
+      kycVerified === undefined ? null : (kycVerified ? 1 : 0), req.params.id);
 
     res.json({ success: true, message: 'Guard updated' });
   } catch (err) {

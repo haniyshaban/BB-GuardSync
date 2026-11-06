@@ -46,7 +46,8 @@ async function sendLocation() {
       return;
     }
 
-    await guardApi.submitLocation(lat, lng, accuracy);
+    const battery = await getBatteryLevel();
+    await guardApi.submitLocation(lat, lng, accuracy, battery);
     console.log(`[LocationService] Location sent: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
   } catch (err) {
     console.error('[LocationService] Failed to send location:', err);
@@ -55,4 +56,18 @@ async function sendLocation() {
 
 export function isTracking(): boolean {
   return locationInterval !== null;
+}
+
+// Best-effort battery level (%) via the Battery Status API; undefined when unsupported.
+async function getBatteryLevel(): Promise<number | undefined> {
+  try {
+    const nav = navigator as any;
+    if (typeof nav.getBattery === 'function') {
+      const b = await nav.getBattery();
+      if (b && typeof b.level === 'number') return Math.round(b.level * 100);
+    }
+  } catch {
+    // ignore — battery reporting is optional
+  }
+  return undefined;
 }
