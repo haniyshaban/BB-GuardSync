@@ -1,4 +1,4 @@
-import { Fragment, useEffect } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -36,7 +36,8 @@ export type MapGuard = {
 };
 export type MapFence = { id: number; name: string; lat: number | null; lng: number | null; radius: number; points?: [number, number][] };
 export type MapSos = { id: number; lat: number; lng: number; guard_name?: string; site_name?: string; created_at: string };
-export type Focus = { lat: number; lng: number; zoom?: number; key: number } | null;
+// `marker` (e.g. 'g-12' or 'sos-3') names the pin whose popup opens once the map arrives.
+export type Focus = { lat: number; lng: number; zoom?: number; marker?: string; key: number } | null;
 
 // Fit the view to all points whenever the set of points changes (e.g. the site filter changes).
 function FitToPoints({ points, fitKey }: { points: [number, number][]; fitKey: string }) {
@@ -51,11 +52,17 @@ function FitToPoints({ points, fitKey }: { points: [number, number][]; fitKey: s
   return null;
 }
 
-function FlyTo({ focus }: { focus: Focus }) {
+function FlyTo({ focus, markers }: { focus: Focus; markers: React.MutableRefObject<Record<string, L.Marker | null>> }) {
   const map = useMap();
   useEffect(() => {
-    if (focus) map.flyTo([focus.lat, focus.lng], focus.zoom ?? 17, { duration: 0.6 });
-  }, [focus, map]);
+    if (!focus) return;
+    map.closePopup();
+    map.flyTo([focus.lat, focus.lng], focus.zoom ?? 18, { duration: 0.6 });
+    if (!focus.marker) return;
+    const open = () => markers.current[focus.marker!]?.openPopup();
+    map.once('moveend', open);
+    return () => { map.off('moveend', open); };
+  }, [focus, map, markers]);
   return null;
 }
 
@@ -73,6 +80,7 @@ export default function LiveMap({ guards, fences, sos, focus, fitKey, height = 5
     ? located.map(g => [g.lat as number, g.lng as number] as [number, number])
     : fences.flatMap(f => f.points && f.points.length >= 3 ? f.points : f.lat != null && f.lng != null ? [[f.lat, f.lng] as [number, number]] : []);
   const center: [number, number] = points[0] || [12.9716, 77.5946]; // Bengaluru fallback
+  const markers = useRef<Record<string, L.Marker | null>>({});
 
   return (
     <div style={{ height }} className="w-full">
@@ -82,7 +90,7 @@ export default function LiveMap({ guards, fences, sos, focus, fitKey, height = 5
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <FitToPoints points={points} fitKey={fitKey} />
-        <FlyTo focus={focus} />
+        <FlyTo focus={focus} markers={markers} />
 
         {fences.map(f => {
           const style = { color: STATUS_COLORS.fence, weight: 1.5, dashArray: '6 6', fillColor: STATUS_COLORS.fence, fillOpacity: 0.07 };
@@ -102,7 +110,7 @@ export default function LiveMap({ guards, fences, sos, focus, fitKey, height = 5
         })}
 
         {located.map(g => (
-          <Marker key={`g-${g.id}`} position={[g.lat as number, g.lng as number]}
+          <Marker key={`g-${g.id}`} ref={m => { markers.current[`g-${g.id}`] = m; }} position={[g.lat as number, g.lng as number]}
             icon={g.offsite ? ICONS.out : g.status === 'idle' ? ICONS.inactive : ICONS.active}>
             <Popup>
               <strong>{g.name}</strong><br />
@@ -118,7 +126,7 @@ export default function LiveMap({ guards, fences, sos, focus, fitKey, height = 5
         {sos.map(s => (
           <Fragment key={`sos-${s.id}`}>
             <Circle center={[s.lat, s.lng]} radius={80} pathOptions={{ color: STATUS_COLORS.sos, fillColor: STATUS_COLORS.sos, fillOpacity: 0.15 }} />
-            <Marker position={[s.lat, s.lng]} icon={ICONS.sos}>
+            <Marker ref={m => { markers.current[`sos-${s.id}`] = m; }} position={[s.lat, s.lng]} icon={ICONS.sos}>
               <Popup>
                 <strong style={{ color: STATUS_COLORS.sos }}>SOS</strong><br />
                 {s.guard_name}<br />

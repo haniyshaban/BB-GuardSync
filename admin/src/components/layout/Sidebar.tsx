@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/utils';
@@ -66,13 +66,13 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
     <div className="flex flex-col h-full bg-gray-900 text-white">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-5 border-b border-gray-800">
-        <div className="flex items-center gap-3">
+        <Link to="/" onClick={onClose} className="flex items-center gap-3 hover:opacity-80" title="Go to Live Dashboard">
           <img src="/logo.png" alt="Black Belt Logo" className="w-8 h-8" />
           <div>
             <h1 className="text-lg font-bold leading-tight">Black Belt</h1>
             <p className="text-xs text-gray-400">GuardSync Admin</p>
           </div>
-        </div>
+        </Link>
         <button onClick={onClose} className="lg:hidden p-1 hover:bg-gray-800 rounded">
           <X className="w-5 h-5" />
         </button>

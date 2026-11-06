@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, formatDateTime } from '@/lib/utils';
 import { AlertOctagon, Siren, Check, CheckCheck } from 'lucide-react';
@@ -10,6 +11,10 @@ const SEV_COLORS: Record<string, string> = {
 
 export default function IncidentsPage() {
   const qc = useQueryClient();
+  // Opened from the dashboard's "Go to alert": ?id=<incident id> highlights that entry.
+  const [params] = useSearchParams();
+  const focusId = params.get('id');
+  const focusRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState('');
   const [type, setType] = useState('');
 
@@ -34,6 +39,11 @@ export default function IncidentsPage() {
   });
 
   const incidents = data?.data || [];
+  const focusFound = !!focusId && incidents.some((i: any) => String(i.id) === focusId);
+
+  useEffect(() => {
+    if (focusFound) focusRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [focusFound]);
 
   return (
     <div className="space-y-4">
@@ -53,7 +63,8 @@ export default function IncidentsPage() {
         {isLoading ? <div className="px-4 py-8 text-center text-gray-500">Loading…</div>
         : incidents.length === 0 ? <div className="px-4 py-8 text-center text-gray-500">No incidents</div>
         : incidents.map((i: any) => (
-          <div key={i.id} className={`px-4 py-3 flex items-start gap-3 ${i.type === 'sos' && i.status === 'open' ? 'bg-red-50' : ''}`}>
+          <div key={i.id} ref={String(i.id) === focusId ? focusRef : undefined}
+            className={`px-4 py-3 flex items-start gap-3 ${i.type === 'sos' && i.status === 'open' ? 'bg-red-50' : ''} ${String(i.id) === focusId ? 'ring-2 ring-inset ring-yellow-400' : ''}`}>
             {i.type === 'sos' ? <Siren className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" /> : <AlertOctagon className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">

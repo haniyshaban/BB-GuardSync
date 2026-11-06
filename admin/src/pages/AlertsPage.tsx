@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, formatDateTime } from '@/lib/utils';
 import { Bell, Check, X } from 'lucide-react';
@@ -10,8 +11,12 @@ const TYPE_LABELS: Record<string, string> = {
 
 export default function AlertsPage() {
   const qc = useQueryClient();
+  // Opened from the dashboard's "Go to alert": ?type=offsite&guard=12 highlights that guard's alerts.
+  const [params] = useSearchParams();
+  const focusGuard = params.get('guard');
   const [status, setStatus] = useState('active');
-  const [type, setType] = useState('');
+  const [type, setType] = useState(params.get('type') || '');
+  const firstMatch = useRef<HTMLDivElement | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['alerts', status, type],
@@ -34,6 +39,13 @@ export default function AlertsPage() {
   });
 
   const alerts = data?.data || [];
+  const isFocused = (a: any) => !!focusGuard && String(a.guard_id) === focusGuard;
+  const firstFocusedId = alerts.find(isFocused)?.id;
+
+  // Scroll the highlighted alert into view once the list has loaded.
+  useEffect(() => {
+    if (firstFocusedId != null) firstMatch.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [firstFocusedId]);
   const sevDot = (sev: string) => sev === 'critical' ? 'bg-red-500' : sev === 'high' ? 'bg-orange-500' : sev === 'medium' ? 'bg-amber-400' : 'bg-gray-400';
 
   return (
@@ -62,13 +74,21 @@ export default function AlertsPage() {
         </div>
       </div>
 
+      {focusGuard && !isLoading && firstFocusedId == null && (
+        <div className="px-4 py-3 rounded-lg bg-amber-50 text-amber-800 text-sm">
+          No {[status, type && TYPE_LABELS[type]?.toLowerCase()].filter(Boolean).join(' ')} alert logged for this guard yet. Alerts are logged after a short grace period.{' '}
+          <Link to={`/guards/${focusGuard}`} className="underline font-medium">Open guard profile</Link>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
         {isLoading ? (
           <div className="px-4 py-8 text-center text-gray-500">Loading…</div>
         ) : alerts.length === 0 ? (
           <div className="px-4 py-8 text-center text-gray-500">No alerts</div>
         ) : alerts.map((a: any) => (
-          <div key={a.id} className="px-4 py-3 flex items-center gap-3">
+          <div key={a.id} ref={a.id === firstFocusedId ? firstMatch : undefined}
+            className={`px-4 py-3 flex items-center gap-3 ${isFocused(a) ? 'bg-yellow-50 ring-2 ring-inset ring-yellow-400' : ''}`}>
             <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${sevDot(a.severity)}`} />
             <div className="flex-1 min-w-0">
               <div className="text-sm text-gray-900">{a.message}</div>

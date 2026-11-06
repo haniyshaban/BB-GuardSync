@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, formatTime, cn } from '@/lib/utils';
 import LiveMap, { STATUS_COLORS, guardStatusLabel, type Focus, type MapGuard } from '@/components/LiveMap';
-import { Users, ShieldCheck, MapPinOff, Moon, Bell, Siren, BatteryLow, ChevronRight, UserPlus, CheckCircle2 } from 'lucide-react';
+import { Users, ShieldCheck, MapPinOff, Moon, Bell, Siren, BatteryLow, ChevronRight, UserPlus, CheckCircle2, ArrowUpRight } from 'lucide-react';
 
 type Filter = 'all' | 'out' | 'inactive';
 
 export default function LiveDashboardPage() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const [siteId, setSiteId] = useState(params.get('site') || '');
   const [filter, setFilter] = useState<Filter>('all');
   const [tab, setTab] = useState<'guards' | 'sites'>('guards');
@@ -50,16 +51,21 @@ export default function LiveDashboardPage() {
   const lowBattery = roster.filter(g => g.battery != null && g.battery <= lowBat);
   const visible = filter === 'out' ? out : filter === 'inactive' ? inactive : roster;
 
-  const flyTo = (lat?: number | null, lng?: number | null) => {
-    if (lat != null && lng != null) setFocus({ lat, lng, key: Date.now() });
+  // Zoom to a pin and open its popup. `marker` is the LiveMap pin id ('g-<guardId>' or 'sos-<id>').
+  const flyTo = (lat?: number | null, lng?: number | null, marker?: string) => {
+    if (lat == null || lng == null) return;
+    // A stat filter may be hiding this guard's pin: show everyone again.
+    if (marker?.startsWith('g-') && !visible.some(g => `g-${g.id}` === marker)) setFilter('all');
+    setFocus({ lat, lng, marker, key: Date.now() });
   };
 
   // "Needs attention": the few things a supervisor should act on now, most urgent first.
+  // `link` opens the matching entry on the Incidents or Alerts page.
   const attention = [
-    ...sos.map((s: any) => ({ key: `sos-${s.id}`, tone: 'sos', icon: Siren, title: `SOS from ${s.guard_name}`, sub: `${s.site_name || ''} · ${formatTime(s.created_at)}`, lat: s.lat, lng: s.lng })),
-    ...out.map(g => ({ key: `out-${g.id}`, tone: 'out', icon: MapPinOff, title: `${g.name} is out of location`, sub: `${g.distanceFromSite ?? '?'} m from ${g.site_name}`, lat: g.lat, lng: g.lng })),
-    ...lowBattery.map(g => ({ key: `bat-${g.id}`, tone: 'warn', icon: BatteryLow, title: `${g.name}: battery ${g.battery}%`, sub: g.site_name || '', lat: g.lat, lng: g.lng })),
-    ...inactive.map(g => ({ key: `ina-${g.id}`, tone: 'muted', icon: Moon, title: `${g.name} is inactive`, sub: `No movement or GPS since ${g.lastPing ? formatTime(g.lastPing) : '—'}`, lat: g.lat, lng: g.lng })),
+    ...sos.map((s: any) => ({ key: `sos-${s.id}`, tone: 'sos', icon: Siren, title: `SOS from ${s.guard_name}`, sub: `${s.site_name || ''} · ${formatTime(s.created_at)}`, lat: s.lat, lng: s.lng, marker: `sos-${s.id}`, link: `/incidents?id=${s.id}` })),
+    ...out.map(g => ({ key: `out-${g.id}`, tone: 'out', icon: MapPinOff, title: `${g.name} is out of location`, sub: `${g.distanceFromSite ?? '?'} m from ${g.site_name}`, lat: g.lat, lng: g.lng, marker: `g-${g.id}`, link: `/alerts?type=offsite&guard=${g.id}` })),
+    ...lowBattery.map(g => ({ key: `bat-${g.id}`, tone: 'warn', icon: BatteryLow, title: `${g.name}: battery ${g.battery}%`, sub: g.site_name || '', lat: g.lat, lng: g.lng, marker: `g-${g.id}`, link: `/alerts?type=low_battery&guard=${g.id}` })),
+    ...inactive.map(g => ({ key: `ina-${g.id}`, tone: 'muted', icon: Moon, title: `${g.name} is inactive`, sub: `No movement or GPS since ${g.lastPing ? formatTime(g.lastPing) : '—'}`, lat: g.lat, lng: g.lng, marker: `g-${g.id}`, link: `/alerts?guard=${g.id}` })),
   ];
 
   const siteName = siteId ? sites.find(s => String(s.site_id) === siteId)?.site_name : null;
@@ -138,15 +144,22 @@ export default function LiveDashboardPage() {
                 <p className="text-sm">Every on-duty guard is active and inside their site.</p>
               </div>
             ) : attention.map(a => (
-              <button key={a.key} onClick={() => flyTo(a.lat, a.lng)} className="w-full text-left px-4 py-3 hover:bg-gray-50 flex gap-3 items-start">
-                <span className={cn('mt-0.5 w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0', TONES[a.tone])}>
-                  <a.icon className="w-4 h-4" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-gray-900 truncate">{a.title}</span>
-                  <span className="block text-xs text-gray-500 truncate">{a.sub}</span>
-                </span>
-              </button>
+              <div key={a.key} className="flex items-center hover:bg-gray-50">
+                <button onClick={() => flyTo(a.lat, a.lng, a.marker)} title={a.lat != null ? 'Show on map' : 'No GPS position yet'}
+                  className="flex-1 min-w-0 text-left pl-4 pr-2 py-3 flex gap-3 items-start">
+                  <span className={cn('mt-0.5 w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0', TONES[a.tone])}>
+                    <a.icon className="w-4 h-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-gray-900 truncate">{a.title}</span>
+                    <span className="block text-xs text-gray-500 truncate">{a.sub}</span>
+                  </span>
+                </button>
+                <button onClick={() => navigate(a.link)}
+                  className="mr-3 flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-gray-600 border border-gray-200 bg-white hover:border-gray-400 hover:text-gray-900">
+                  Go to alert <ArrowUpRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -174,7 +187,7 @@ export default function LiveDashboardPage() {
                 {visible.length === 0 ? (
                   <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">No guards to show</td></tr>
                 ) : visible.map(g => (
-                  <tr key={g.id} onClick={() => flyTo(g.lat, g.lng)} className="hover:bg-gray-50 cursor-pointer">
+                  <tr key={g.id} onClick={() => flyTo(g.lat, g.lng, `g-${g.id}`)} className="hover:bg-gray-50 cursor-pointer">
                     <td className="px-4 py-2.5 font-medium text-gray-900">{g.name}</td>
                     <td className="px-4 py-2.5 text-gray-600">{g.site_name || '—'}</td>
                     <td className="px-4 py-2.5"><StatusBadge g={g} /></td>

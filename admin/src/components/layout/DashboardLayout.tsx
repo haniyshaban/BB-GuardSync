@@ -1,4 +1,5 @@
 import { useState, ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { Menu } from 'lucide-react';
 
@@ -23,8 +24,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <button onClick={() => setSidebarOpen(true)} className="p-2 hover:bg-gray-100 rounded-lg">
             <Menu className="w-5 h-5" />
           </button>
-          <img src="/logo.png" alt="Black Belt Logo" className="ml-3 w-8 h-8" />
-          <span className="ml-2 font-semibold text-gray-900">Black Belt</span>
+          <Link to="/" className="ml-3 flex items-center gap-2">
+            <img src="/logo.png" alt="Black Belt Logo" className="w-8 h-8" />
+            <span className="font-semibold text-gray-900">Black Belt</span>
+          </Link>
         </header>
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
       </div>

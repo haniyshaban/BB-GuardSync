@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/utils';
-import { ArrowLeft, Plus, Trash2, AlertTriangle, Search, ChevronDown, Clock, Pencil } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, AlertTriangle, Search, ChevronDown, Clock, Pencil, MapPin, Route } from 'lucide-react';
 import { GeofenceEditor, PatrolCheckpointsEditor } from '@/components/SiteMapEditors';
 import { useState, useRef, useEffect } from 'react';
 
@@ -13,6 +13,7 @@ export default function ManageSitePage() {
   const [showAddStaff, setShowAddStaff] = useState(false);
   const [showDeleteSite, setShowDeleteSite] = useState(false);
   const [shiftDialog, setShiftDialog] = useState<{ open: boolean; shift?: any }>({ open: false });
+  const [mapTab, setMapTab] = useState<'fence' | 'patrol'>('fence');
 
   const { data: siteRes, isLoading } = useQuery({
     queryKey: ['site', id],
@@ -128,11 +129,23 @@ export default function ManageSitePage() {
         </div>
       </div>
 
-      {/* Geofence */}
-      <GeofenceEditor key={`fence-${site.id}`} site={site} siteId={id!} guards={sitePositions} />
-
-      {/* Patrol route */}
-      <PatrolCheckpointsEditor site={site} siteId={id!} />
+      {/* Site map: geofence and patrol route share one map card */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-4 pt-3 flex items-center justify-between gap-3 border-b">
+          <h2 className="text-lg font-semibold pb-3">Site map</h2>
+          <div className="flex">
+            {([['fence', 'Geofence', MapPin], ['patrol', 'Patrol route', Route]] as const).map(([key, label, Icon]) => (
+              <button key={key} onClick={() => setMapTab(key)}
+                className={`inline-flex items-center gap-1.5 px-4 pb-3 pt-1 text-sm font-medium border-b-2 -mb-px ${mapTab === key ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                <Icon className="w-4 h-4" /> {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {mapTab === 'fence'
+          ? <GeofenceEditor key={`fence-${site.id}`} site={site} siteId={id!} guards={sitePositions} />
+          : <PatrolCheckpointsEditor site={site} siteId={id!} />}
+      </div>
 
       {/* Shifts */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">

@@ -4,7 +4,7 @@ import { MapContainer, TileLayer, Marker, Circle, Polygon, Popup, useMap, useMap
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { api, cn } from '@/lib/utils';
-import { MapPin, Undo2, Trash2, Route, Plus, X } from 'lucide-react';
+import { Undo2, Trash2, Plus, X } from 'lucide-react';
 
 type LatLng = { lat: number; lng: number };
 const FALLBACK: [number, number] = [12.9716, 77.5946]; // Bengaluru
@@ -63,9 +63,27 @@ export function FenceShape({ site }: { site: any }) {
   return null;
 }
 
+
+/** Map on the left, controls on the right (stacked on small screens). */
+function SplitLayout({ map, panel }: { map: React.ReactNode; panel: React.ReactNode }) {
+  return (
+    <div className="flex flex-col lg:flex-row">
+      <div className="relative flex-1 min-w-0 h-[380px] lg:h-[480px]">{map}</div>
+      <div className="lg:w-80 border-t lg:border-t-0 lg:border-l border-gray-200 p-4 flex flex-col gap-4 lg:max-h-[480px] lg:overflow-y-auto">{panel}</div>
+    </div>
+  );
+}
+
+function MapHint({ text, tone = 'dark' }: { text: string; tone?: 'dark' | 'green' }) {
+  return (
+    <div className={cn('absolute left-1/2 -translate-x-1/2 top-3 z-[500] text-white text-xs px-3 py-1.5 rounded-full pointer-events-none whitespace-nowrap',
+      tone === 'green' ? 'bg-green-700/90' : 'bg-gray-900/85')}>{text}</div>
+  );
+}
+
 /**
  * Geofence editor: radius (click to place the centre, drag to move, slider for size)
- * or polygon (click to add corners). Mirrors the GuardSync site geofence editor.
+ * or polygon (click to add corners).
  */
 export function GeofenceEditor({ site, siteId, guards = [] }: { site: any; siteId: string; guards?: any[] }) {
   const qc = useQueryClient();
@@ -116,101 +134,105 @@ export function GeofenceEditor({ site, siteId, guards = [] }: { site: any; siteI
 
   const canSave = mode === 'radius' ? !!centre : points.length >= 3 || !enabled;
   const hint = mode === 'radius'
-    ? (centre ? 'Click the map or drag the blue pin to move the site centre.' : 'Click the map to place the site centre.')
-    : points.length < 3 ? `Click the map to add corners (${points.length}/3 minimum).` : `${points.length} corners. Keep clicking to add more.`;
+    ? (centre ? 'Click the map or drag the blue pin to move the centre' : 'Click the map to place the site centre')
+    : points.length < 3 ? `Click the map to add corners (${points.length}/3 minimum)` : `${points.length} corners · keep clicking to add more`;
 
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-6 pt-5 pb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2"><MapPin className="w-5 h-5" /> Geofence</h2>
-          <p className="text-sm text-gray-500">Guards outside this area for longer than the grace period are marked <strong>Out of Location</strong>.</p>
-        </div>
-        <label className="flex items-center gap-2 text-sm font-medium cursor-pointer select-none">
-          <span className={cn('relative inline-flex h-6 w-11 rounded-full transition', enabled ? 'bg-green-600' : 'bg-gray-300')}>
-            <input type="checkbox" className="sr-only" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
-            <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition', enabled ? 'left-[22px]' : 'left-0.5')} />
-          </span>
-          {enabled ? 'Enabled' : 'Disabled'}
-        </label>
+  const map = (
+    <>
+      <MapHint text={hint} />
+      <div className="h-full cursor-crosshair">
+        <MapContainer center={startPoints[0] || FALLBACK} zoom={startPoints.length ? 17 : 12} style={{ height: '100%', width: '100%' }}>
+          <Tiles />
+          <Frame points={startPoints} fitKey="init" />
+          <ClickCapture onClick={onMapClick} />
+
+          {mode === 'radius' && centre && (
+            <>
+              <Circle center={[centre.lat, centre.lng]} radius={radius}
+                pathOptions={{ color: '#2563eb', weight: 2, fillColor: '#2563eb', fillOpacity: enabled ? 0.12 : 0.04, dashArray: enabled ? undefined : '6 6' }} />
+              <Marker position={[centre.lat, centre.lng]} icon={centreIcon} draggable
+                eventHandlers={{ dragend: e => { const ll = (e.target as L.Marker).getLatLng(); setCentre({ lat: ll.lat, lng: ll.lng }); } }} />
+            </>
+          )}
+
+          {mode === 'polygon' && (
+            <>
+              {points.length >= 2 && (
+                <Polygon positions={points.map(p => [p.lat, p.lng])}
+                  pathOptions={{ color: '#2563eb', weight: 2, fillColor: '#2563eb', fillOpacity: points.length >= 3 ? 0.12 : 0 }} />
+              )}
+              {points.map((p, i) => <Marker key={i} position={[p.lat, p.lng]} icon={vertexIcon} />)}
+            </>
+          )}
+
+          {guards.filter(g => g.lat != null && g.lng != null).map(g => (
+            <Marker key={`g-${g.id}`} position={[g.lat, g.lng]} icon={guardIcon(!!g.clocked_in)}>
+              <Popup>{g.name}</Popup>
+            </Marker>
+          ))}
+        </MapContainer>
       </div>
+    </>
+  );
 
-      <div className="px-6 pb-4 flex flex-wrap items-center gap-3">
-        <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+  const panel = (
+    <>
+      <p className="text-sm text-gray-500">Guards outside this area for longer than the grace period are marked <strong>Out of location</strong>.</p>
+
+      <label className="flex items-center justify-between text-sm font-medium cursor-pointer select-none">
+        Geofence {enabled ? 'on' : 'off'}
+        <span className={cn('relative inline-flex h-6 w-11 rounded-full transition', enabled ? 'bg-green-600' : 'bg-gray-300')}>
+          <input type="checkbox" className="sr-only" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+          <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition', enabled ? 'left-[22px]' : 'left-0.5')} />
+        </span>
+      </label>
+
+      <div>
+        <p className="text-xs font-medium text-gray-500 mb-1.5">Shape</p>
+        <div className="grid grid-cols-2 rounded-lg border border-gray-200 p-0.5 bg-gray-50">
           {(['radius', 'polygon'] as const).map(m => (
             <button key={m} onClick={() => { setMode(m); setMsg(null); }}
               className={cn('px-3 py-1.5 text-sm rounded-md font-medium', mode === m ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700')}>
-              {m === 'radius' ? 'Radius' : 'Custom polygon'}
+              {m === 'radius' ? 'Circle' : 'Custom area'}
             </button>
           ))}
         </div>
-
-        {mode === 'radius' ? (
-          <div className="flex items-center gap-3 flex-1 min-w-[240px]">
-            <input type="range" min={25} max={1000} step={5} value={radius} onChange={e => setRadius(Number(e.target.value))} className="flex-1 accent-gray-900" />
-            <span className="text-sm font-semibold bg-gray-100 px-3 py-1 rounded-full w-20 text-center">{radius} m</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <button onClick={() => setPoints(p => p.slice(0, -1))} disabled={!points.length}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-40"><Undo2 className="w-4 h-4" /> Undo</button>
-            <button onClick={() => setPoints([])} disabled={!points.length}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-40"><Trash2 className="w-4 h-4" /> Clear</button>
-          </div>
-        )}
       </div>
 
-      <div className="relative">
-        <div className="absolute left-1/2 -translate-x-1/2 top-3 z-[500] bg-gray-900/85 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none">{hint}</div>
-        <div className="h-[420px] cursor-crosshair">
-          <MapContainer center={startPoints[0] || FALLBACK} zoom={startPoints.length ? 17 : 12} style={{ height: '100%', width: '100%' }}>
-            <Tiles />
-            <Frame points={startPoints} fitKey="init" />
-            <ClickCapture onClick={onMapClick} />
-
-            {mode === 'radius' && centre && (
-              <>
-                <Circle center={[centre.lat, centre.lng]} radius={radius}
-                  pathOptions={{ color: '#2563eb', weight: 2, fillColor: '#2563eb', fillOpacity: enabled ? 0.12 : 0.04, dashArray: enabled ? undefined : '6 6' }} />
-                <Marker position={[centre.lat, centre.lng]} icon={centreIcon} draggable
-                  eventHandlers={{ dragend: e => { const ll = (e.target as L.Marker).getLatLng(); setCentre({ lat: ll.lat, lng: ll.lng }); } }} />
-              </>
-            )}
-
-            {mode === 'polygon' && (
-              <>
-                {points.length >= 2 && (
-                  <Polygon positions={points.map(p => [p.lat, p.lng])}
-                    pathOptions={{ color: '#2563eb', weight: 2, fillColor: '#2563eb', fillOpacity: points.length >= 3 ? 0.12 : 0 }} />
-                )}
-                {points.map((p, i) => <Marker key={i} position={[p.lat, p.lng]} icon={vertexIcon} />)}
-              </>
-            )}
-
-            {guards.filter(g => g.lat != null && g.lng != null).map(g => (
-              <Marker key={`g-${g.id}`} position={[g.lat, g.lng]} icon={guardIcon(!!g.clocked_in)}>
-                <Popup>{g.name}</Popup>
-              </Marker>
-            ))}
-          </MapContainer>
+      {mode === 'radius' ? (
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-xs font-medium text-gray-500">Radius</p>
+            <span className="text-sm font-semibold">{radius} m</span>
+          </div>
+          <input type="range" min={25} max={1000} step={5} value={radius} onChange={e => setRadius(Number(e.target.value))} className="w-full accent-gray-900" />
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => setPoints(p => p.slice(0, -1))} disabled={!points.length}
+            className="inline-flex items-center justify-center gap-1 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-40"><Undo2 className="w-4 h-4" /> Undo</button>
+          <button onClick={() => setPoints([])} disabled={!points.length}
+            className="inline-flex items-center justify-center gap-1 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-40"><Trash2 className="w-4 h-4" /> Clear</button>
+        </div>
+      )}
 
-      <div className="px-6 py-4 border-t flex items-center gap-3">
+      <div className="mt-auto space-y-2">
         <button onClick={() => save.mutate()} disabled={!canSave || save.isPending}
-          className="px-5 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">
+          className="w-full px-5 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">
           {save.isPending ? 'Saving…' : 'Save geofence'}
         </button>
-        {msg && <span className={cn('text-sm', msg.ok ? 'text-green-600' : 'text-red-600')}>{msg.ok ? '✓ ' : ''}{msg.text}</span>}
-        {centre && (
-          <span className="ml-auto text-xs text-gray-400 font-mono">{centre.lat.toFixed(5)}, {centre.lng.toFixed(5)}</span>
-        )}
+        {msg && <p className={cn('text-sm text-center', msg.ok ? 'text-green-600' : 'text-red-600')}>{msg.ok ? '✓ ' : ''}{msg.text}</p>}
       </div>
-    </div>
+    </>
   );
+
+  return <SplitLayout map={map} panel={panel} />;
 }
 
-/** Patrol route: click the map to add numbered checkpoints for this site. */
+/**
+ * Patrol route: click the map to drop numbered checkpoints, drag a pin to move it.
+ * The side panel lists the checkpoints for renaming, QR codes and removal.
+ */
 export function PatrolCheckpointsEditor({ site, siteId }: { site: any; siteId: string }) {
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
@@ -222,87 +244,107 @@ export function PatrolCheckpointsEditor({ site, siteId }: { site: any; siteId: s
   });
   const checkpoints: any[] = data?.data || [];
 
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['checkpoints', siteId] });
+    qc.invalidateQueries({ queryKey: ['coverage', siteId] });
+  };
   const add = useMutation({
     mutationFn: (p: LatLng) => api(`/patrol/sites/${siteId}/checkpoints`, {
       method: 'POST',
       body: JSON.stringify({ label: `Checkpoint ${checkpoints.length + 1}`, lat: p.lat, lng: p.lng, radiusMeters: cpRadius, sortOrder: checkpoints.length + 1 }),
     }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['checkpoints', siteId] }),
+    onSuccess: refresh,
     onError: (e: any) => alert(e.message),
   });
-  const rename = useMutation({
-    mutationFn: ({ id, label }: { id: number; label: string }) => api(`/patrol/checkpoints/${id}`, { method: 'PUT', body: JSON.stringify({ label }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['checkpoints', siteId] }),
+  const update = useMutation({
+    mutationFn: ({ id, ...body }: { id: number; label?: string; code?: string; lat?: number; lng?: number }) =>
+      api(`/patrol/checkpoints/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    onSuccess: refresh,
   });
   const remove = useMutation({
     mutationFn: (id: number) => api(`/patrol/checkpoints/${id}`, { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['checkpoints', siteId] }),
+    onSuccess: refresh,
   });
 
   const located = checkpoints.filter(c => c.lat != null && c.lng != null);
   const framePts: [number, number][] = [
     ...located.map(c => [c.lat, c.lng] as [number, number]),
-    ...(site.lat != null ? [[site.lat, site.lng] as [number, number]] : []),
-    ...((site.geofence_polygon || []).map((p: LatLng) => [p.lat, p.lng] as [number, number])),
+    ...(site?.lat != null ? [[site.lat, site.lng] as [number, number]] : []),
+    ...((site?.geofence_polygon || []).map((p: LatLng) => [p.lat, p.lng] as [number, number])),
   ];
 
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-6 pt-5 pb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2"><Route className="w-5 h-5" /> Patrol route</h2>
-          <p className="text-sm text-gray-500">Guards scan these checkpoints in the guard app; scans are GPS-verified against each radius.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {adding && (
-            <label className="flex items-center gap-2 text-sm text-gray-600">
-              Radius
-              <input type="number" min={5} max={200} value={cpRadius} onChange={e => setCpRadius(Number(e.target.value))} className="w-20 px-2 py-1.5 border rounded-lg text-sm" />
-              m
-            </label>
-          )}
-          <button onClick={() => setAdding(a => !a)}
-            className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg', adding ? 'bg-green-600 text-white' : 'border hover:bg-gray-50')}>
-            {adding ? 'Done' : <><Plus className="w-4 h-4" /> Add checkpoints</>}
-          </button>
-        </div>
+  const map = (
+    <>
+      <MapHint tone={adding ? 'green' : 'dark'}
+        text={adding ? `Click the map to drop checkpoint ${checkpoints.length + 1}` : checkpoints.length ? 'Drag a pin to move a checkpoint' : 'Press “Add checkpoints”, then click the map'} />
+      <div className={cn('h-full', adding && 'cursor-crosshair')}>
+        <MapContainer center={framePts[0] || FALLBACK} zoom={framePts.length ? 17 : 12} style={{ height: '100%', width: '100%' }}>
+          <Tiles />
+          <Frame points={framePts} fitKey={`${siteId}|${located.length > 0}`} />
+          <FenceShape site={site} />
+          {adding && <ClickCapture onClick={p => !add.isPending && add.mutate(p)} />}
+          {checkpoints.map((c, i) => c.lat != null && c.lng != null && (
+            <Fragment key={c.id}>
+              <Circle center={[c.lat, c.lng]} radius={c.radius_meters || 30} pathOptions={{ color: '#16a34a', weight: 1, fillColor: '#16a34a', fillOpacity: 0.15 }} />
+              <Marker position={[c.lat, c.lng]} icon={checkpointIcon(i + 1)} draggable
+                eventHandlers={{ dragend: e => { const ll = (e.target as L.Marker).getLatLng(); update.mutate({ id: c.id, lat: ll.lat, lng: ll.lng }); } }}>
+                <Popup>{c.label} · {c.radius_meters} m</Popup>
+              </Marker>
+            </Fragment>
+          ))}
+        </MapContainer>
       </div>
+    </>
+  );
 
-      <div className="relative">
-        {adding && <div className="absolute left-1/2 -translate-x-1/2 top-3 z-[500] bg-green-700/90 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none">Click the map to drop checkpoint {checkpoints.length + 1}</div>}
-        <div className={cn('h-[340px]', adding && 'cursor-crosshair')}>
-          <MapContainer center={framePts[0] || FALLBACK} zoom={framePts.length ? 17 : 12} style={{ height: '100%', width: '100%' }}>
-            <Tiles />
-            <Frame points={framePts} fitKey={`${located.length > 0}`} />
-            <FenceShape site={site} />
-            {adding && <ClickCapture onClick={p => !add.isPending && add.mutate(p)} />}
-            {located.map((c, i) => (
-              <Fragment key={c.id}>
-                <Circle center={[c.lat, c.lng]} radius={c.radius_meters || 30} pathOptions={{ color: '#16a34a', weight: 1, fillColor: '#16a34a', fillOpacity: 0.15 }} />
-                <Marker position={[c.lat, c.lng]} icon={checkpointIcon(i + 1)}><Popup>{c.label} · {c.radius_meters} m</Popup></Marker>
-              </Fragment>
-            ))}
-          </MapContainer>
-        </div>
-      </div>
+  const panel = (
+    <>
+      <p className="text-sm text-gray-500">Guards scan these checkpoints in the guard app. Each scan is checked against the checkpoint's radius.</p>
 
-      <div className="px-6 py-4 border-t">
-        {checkpoints.length === 0 ? (
-          <p className="text-sm text-gray-500">No checkpoints yet. Click <strong>Add checkpoints</strong>, then click the map.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {checkpoints.map((c, i) => (
-              <span key={c.id} className="inline-flex items-center gap-2 pl-1 pr-2 py-1 rounded-full bg-green-50 border border-green-200 text-sm">
-                <span className="w-6 h-6 rounded-full bg-green-600 text-white text-xs font-semibold flex items-center justify-center">{i + 1}</span>
-                <input defaultValue={c.label} onBlur={e => e.target.value.trim() && e.target.value !== c.label && rename.mutate({ id: c.id, label: e.target.value.trim() })}
-                  className="bg-transparent w-32 focus:outline-none focus:bg-white rounded px-1" />
-                <span className="text-xs text-gray-500">{c.radius_meters} m</span>
-                <button onClick={() => remove.mutate(c.id)} className="text-gray-400 hover:text-red-600" title="Remove"><X className="w-3.5 h-3.5" /></button>
-              </span>
-            ))}
-          </div>
+      <div className="space-y-2">
+        <button onClick={() => setAdding(a => !a)}
+          className={cn('w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm rounded-lg font-medium', adding ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-900 text-white hover:bg-gray-800')}>
+          {adding ? 'Done adding' : <><Plus className="w-4 h-4" /> Add checkpoints</>}
+        </button>
+        {adding && (
+          <label className="flex items-center justify-between gap-2 text-sm text-gray-600">
+            Scan radius for new pins
+            <span className="flex items-center gap-1">
+              <input type="number" min={5} max={200} value={cpRadius} onChange={e => setCpRadius(Number(e.target.value))} className="w-16 px-2 py-1 border rounded-lg text-sm" /> m
+            </span>
+          </label>
         )}
       </div>
-    </div>
+
+      <div>
+        <p className="text-xs font-medium text-gray-500 mb-1.5">Checkpoints ({checkpoints.length})</p>
+        {checkpoints.length === 0 ? (
+          <p className="text-sm text-gray-400">None yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {checkpoints.map((c, i) => (
+              <li key={c.id} className="flex items-start gap-2 p-2 rounded-lg border border-gray-200">
+                <span className="mt-0.5 w-6 h-6 rounded-full bg-green-600 text-white text-xs font-semibold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <input key={`l-${c.id}-${c.label}`} defaultValue={c.label} title="Rename"
+                    onBlur={e => { const v = e.target.value.trim(); if (v && v !== c.label) update.mutate({ id: c.id, label: v }); }}
+                    className="w-full text-sm font-medium bg-transparent rounded px-1 -mx-1 focus:outline-none focus:bg-gray-50" />
+                  <input key={`c-${c.id}-${c.code}`} defaultValue={c.code || ''} placeholder="QR code (optional)"
+                    onBlur={e => { const v = e.target.value.trim(); if (v !== (c.code || '')) update.mutate({ id: c.id, code: v }); }}
+                    className="w-full text-xs text-gray-500 bg-transparent rounded px-1 -mx-1 focus:outline-none focus:bg-gray-50" />
+                  <p className="text-xs text-gray-400">
+                    {c.radius_meters} m{c.lat == null ? ' · not on map' : ''}
+                    {c.last_scan_today ? <span className="text-green-600"> · ✓ scanned today</span> : null}
+                  </p>
+                </div>
+                <button onClick={() => { if (confirm(`Remove ${c.label}?`)) remove.mutate(c.id); }} className="p-1 text-gray-400 hover:text-red-600" title="Remove"><X className="w-4 h-4" /></button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
   );
+
+  return <SplitLayout map={map} panel={panel} />;
 }
