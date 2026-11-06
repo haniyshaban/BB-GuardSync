@@ -355,7 +355,7 @@ function GeofenceCard({ site, siteId }: { site: any; siteId: string }) {
           Enabled
         </label>
       </div>
-      <p className="text-sm text-gray-500 mb-4">Geotag this site and set an allowed radius. A clocked-in guard outside it beyond the grace period is flagged <strong>Off-site</strong>.</p>
+      <p className="text-sm text-gray-500 mb-4">Geotag this site and set an allowed radius. A clocked-in guard outside it beyond the grace period is flagged <strong>Out of Location</strong>.</p>
       <div className="grid sm:grid-cols-3 gap-4">
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Latitude</label>

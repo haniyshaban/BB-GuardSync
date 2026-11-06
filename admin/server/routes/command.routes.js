@@ -45,7 +45,7 @@ function guardLiveStatus(guardId, config, site) {
     distanceFromSite = haversine(locs[0].lat, locs[0].lng, site.lat, site.lng);
     if (distanceFromSite != null && distanceFromSite > (site.geofence_radius_m || 150)) {
       offsite = true;
-      status = 'off-site';
+      status = 'out-of-location';
     }
   }
   return { status, battery: locs[0].battery, lastPing: locs[0].timestamp, lat: locs[0].lat, lng: locs[0].lng, offsite, distanceFromSite: distanceFromSite == null ? null : Math.round(distanceFromSite) };
@@ -80,6 +80,8 @@ router.get('/live', authMiddleware, requireRole('admin', 'staff'), (req, res) =>
 
       return {
         site_id: site.id, site_name: site.name, address: site.address,
+        lat: site.lat, lng: site.lng,
+        geofence_enabled: !!site.geofence_enabled, geofence_radius_m: site.geofence_radius_m,
         activeShifts: activeShifts.map(s => s.label),
         required, onDuty, shortage,
       };
@@ -110,13 +112,26 @@ router.get('/live', authMiddleware, requireRole('admin', 'staff'), (req, res) =>
 
     const totalShortage = siteBoard.reduce((s, x) => s + x.shortage, 0);
     const lowBattery = roster.filter(r => r.battery != null && r.battery <= (config.low_battery_threshold || 15)).length;
+    const totalGuards = db.prepare("SELECT COUNT(*) AS c FROM guards WHERE approval_status = 'active'").get().c;
+    const pendingEnrollments = db.prepare("SELECT COUNT(*) AS c FROM guards WHERE approval_status = 'pending'").get().c;
+
+    // Open SOS incidents with coordinates, for map pins on the live dashboard.
+    const sosPins = db.prepare(`
+      SELECT i.id, i.lat, i.lng, i.created_at, i.site_id, g.name AS guard_name, s.name AS site_name
+      FROM incidents i LEFT JOIN guards g ON g.id = i.guard_id LEFT JOIN sites s ON s.id = i.site_id
+      WHERE i.type = 'sos' AND i.status != 'resolved' AND i.lat IS NOT NULL
+      ORDER BY i.created_at DESC LIMIT 50
+    `).all();
 
     res.json({
       success: true,
       data: {
         generatedAt: now.toISOString(),
+        lowBatteryThreshold: config.low_battery_threshold || 15,
+        sos: sosPins,
         summary: {
           sites: sites.length,
+          totalGuards, pendingEnrollments,
           onDuty: roster.length,
           online: roster.filter(r => r.status === 'online').length,
           idle: roster.filter(r => r.status === 'idle').length,

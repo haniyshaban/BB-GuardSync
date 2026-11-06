@@ -1,31 +1,58 @@
 import { NavLink } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/lib/utils';
 import {
-  LayoutDashboard, Users, Building2, ClipboardCheck,
-  DollarSign, Settings, LogOut, X, Radio, Route, ClipboardList,
-  AlertOctagon, Bell, Clock, Package, Eye, Map,
+  Radio, Users, Building2, ClipboardCheck, Route, ClipboardList, AlertOctagon,
+  Bell, Clock, DollarSign, Package, Eye, Settings, LogOut, X,
 } from 'lucide-react';
 
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/command', icon: Radio, label: 'Command Centre' },
-  { to: '/map', icon: Map, label: 'Live Map' },
-  { to: '/guards', icon: Users, label: 'Guards' },
-  { to: '/sites', icon: Building2, label: 'Sites' },
-  { to: '/attendance', icon: ClipboardCheck, label: 'Attendance' },
-  { to: '/patrol', icon: Route, label: 'Patrolling' },
-  { to: '/tasks', icon: ClipboardList, label: 'Tasks' },
-  { to: '/incidents', icon: AlertOctagon, label: 'Incidents & SOS' },
-  { to: '/alerts', icon: Bell, label: 'Alerts' },
-  { to: '/overtime', icon: Clock, label: 'Overtime' },
-  { to: '/assets', icon: Package, label: 'Assets' },
-  { to: '/payroll', icon: DollarSign, label: 'Payroll' },
-  { to: '/clients', icon: Eye, label: 'Client Access' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
+type Item = { to: string; icon: any; label: string; badge?: 'alerts' };
+
+const sections: { title?: string; items: Item[] }[] = [
+  { items: [{ to: '/', icon: Radio, label: 'Live Dashboard' }] },
+  {
+    title: 'Workforce',
+    items: [
+      { to: '/guards', icon: Users, label: 'Guards' },
+      { to: '/sites', icon: Building2, label: 'Sites' },
+      { to: '/attendance', icon: ClipboardCheck, label: 'Attendance' },
+    ],
+  },
+  {
+    title: 'Operations',
+    items: [
+      { to: '/patrol', icon: Route, label: 'Patrols' },
+      { to: '/tasks', icon: ClipboardList, label: 'Tasks' },
+      { to: '/incidents', icon: AlertOctagon, label: 'Incidents & SOS' },
+      { to: '/alerts', icon: Bell, label: 'Alerts', badge: 'alerts' },
+    ],
+  },
+  {
+    title: 'Reports',
+    items: [
+      { to: '/overtime', icon: Clock, label: 'Overtime' },
+      { to: '/payroll', icon: DollarSign, label: 'Payroll' },
+    ],
+  },
+  {
+    title: 'Admin',
+    items: [
+      { to: '/assets', icon: Package, label: 'Assets' },
+      { to: '/clients', icon: Eye, label: 'Client Access' },
+      { to: '/settings', icon: Settings, label: 'Settings' },
+    ],
+  },
 ];
 
 export default function Sidebar({ onClose }: { onClose: () => void }) {
   const { user, logout } = useAuth();
+  const { data: countRes } = useQuery({
+    queryKey: ['alerts-count'],
+    queryFn: () => api('/alerts/count'),
+    refetchInterval: 30000,
+  });
+  const activeAlerts: number = countRes?.data?.active || 0;
 
   return (
     <div className="flex flex-col h-full bg-gray-900 text-white">
@@ -34,7 +61,7 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
         <div className="flex items-center gap-3">
           <img src="/logo.png" alt="Black Belt Logo" className="w-8 h-8" />
           <div>
-            <h1 className="text-lg font-bold">Black Belt</h1>
+            <h1 className="text-lg font-bold leading-tight">Black Belt</h1>
             <p className="text-xs text-gray-400">GuardSync Admin</p>
           </div>
         </div>
@@ -44,22 +71,36 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            onClick={onClose}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive ? 'bg-white text-gray-900' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-              }`
-            }
-          >
-            <Icon className="w-5 h-5" />
-            {label}
-          </NavLink>
+      <nav className="flex-1 overflow-y-auto px-3 py-3">
+        {sections.map((section, i) => (
+          <div key={i} className={i > 0 ? 'mt-4' : ''}>
+            {section.title && (
+              <p className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500">{section.title}</p>
+            )}
+            <div className="space-y-0.5">
+              {section.items.map(({ to, icon: Icon, label, badge }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/'}
+                  onClick={onClose}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      isActive ? 'bg-white text-gray-900' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    }`
+                  }
+                >
+                  <Icon className="w-[18px] h-[18px]" />
+                  <span className="flex-1">{label}</span>
+                  {badge === 'alerts' && activeAlerts > 0 && (
+                    <span className="min-w-[20px] px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[11px] font-semibold text-center">
+                      {activeAlerts > 99 ? '99+' : activeAlerts}
+                    </span>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
@@ -68,7 +109,7 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">{user?.name}</p>
-            <p className="text-xs text-gray-400">{user?.role}</p>
+            <p className="text-xs text-gray-400 capitalize">{user?.role}</p>
           </div>
           <button onClick={logout} className="p-2 hover:bg-gray-800 rounded-lg" title="Logout">
             <LogOut className="w-4 h-4 text-gray-400" />

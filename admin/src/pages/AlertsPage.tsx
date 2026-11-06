@@ -5,7 +5,7 @@ import { Bell, Check, X } from 'lucide-react';
 
 const TYPE_LABELS: Record<string, string> = {
   sleep: 'Sleep', shortage: 'Shortage', sos: 'SOS', incident: 'Incident',
-  overtime: 'Overtime', face_fail: 'Face fail', low_battery: 'Low battery', offline: 'Offline',
+  overtime: 'Overtime', face_fail: 'Face fail', low_battery: 'Low battery', offline: 'Offline', offsite: 'Out of location',
 };
 
 export default function AlertsPage() {
