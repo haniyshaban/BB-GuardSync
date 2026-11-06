@@ -3,8 +3,17 @@ const express = require('express');
 const db = require('../db');
 const { authMiddleware, requireRole } = require('../auth');
 const { createAlert } = require('../lib/alerts');
+const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
+
+// Lenient limiter: curbs scripted spam without blocking genuine emergencies.
+// A real guard won't legitimately file 20 reports a minute.
+const reportLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { success: false, error: 'Too many reports in a short time. Please wait a moment.' },
+});
 
 // Helper: resolve a guard's org/site for alert context
 function guardContext(guardId) {
@@ -14,7 +23,7 @@ function guardContext(guardId) {
 // ---------- Guard-facing ----------
 
 // POST /api/incidents - guard reports an incident
-router.post('/', authMiddleware, (req, res) => {
+router.post('/', authMiddleware, reportLimiter, (req, res) => {
   try {
     if (req.user.role !== 'guard') return res.status(403).json({ success: false, error: 'Guards only' });
     const { category, severity, description, photoUrl, lat, lng } = req.body;
@@ -38,7 +47,7 @@ router.post('/', authMiddleware, (req, res) => {
 });
 
 // POST /api/incidents/sos - panic button
-router.post('/sos', authMiddleware, (req, res) => {
+router.post('/sos', authMiddleware, reportLimiter, (req, res) => {
   try {
     if (req.user.role !== 'guard') return res.status(403).json({ success: false, error: 'Guards only' });
     const { lat, lng, description } = req.body;

@@ -59,9 +59,13 @@ router.post('/', authMiddleware, requireRole('admin'), (req, res) => {
   try {
     const { name, category, assetTag, quantity, unitValue, notes } = req.body;
     if (!name) return res.status(400).json({ success: false, error: 'Asset name is required' });
+    const qty = quantity == null ? 1 : Math.floor(Number(quantity));
+    if (!Number.isFinite(qty) || qty < 1) return res.status(400).json({ success: false, error: 'Quantity must be a positive integer' });
+    const value = unitValue == null ? 0 : Number(unitValue);
+    if (!Number.isFinite(value) || value < 0) return res.status(400).json({ success: false, error: 'Unit value must be zero or positive' });
     const result = db.prepare(
       'INSERT INTO assets (name, category, asset_tag, quantity, unit_value, notes) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(name, category || null, assetTag || null, quantity || 1, unitValue || 0, notes || null);
+    ).run(name, category || null, assetTag || null, qty, value, notes || null);
     res.status(201).json({ success: true, data: { id: result.lastInsertRowid }, message: 'Asset created' });
   } catch (err) {
     if (String(err).includes('UNIQUE')) return res.status(409).json({ success: false, error: 'Asset tag already exists' });
@@ -73,6 +77,12 @@ router.post('/', authMiddleware, requireRole('admin'), (req, res) => {
 router.put('/:id', authMiddleware, requireRole('admin'), (req, res) => {
   try {
     const { name, category, assetTag, quantity, unitValue, status, notes } = req.body;
+    if (quantity != null && (!Number.isFinite(Number(quantity)) || Math.floor(Number(quantity)) < 1)) {
+      return res.status(400).json({ success: false, error: 'Quantity must be a positive integer' });
+    }
+    if (unitValue != null && (!Number.isFinite(Number(unitValue)) || Number(unitValue) < 0)) {
+      return res.status(400).json({ success: false, error: 'Unit value must be zero or positive' });
+    }
     db.prepare(`
       UPDATE assets SET name = COALESCE(?, name), category = COALESCE(?, category),
         asset_tag = COALESCE(?, asset_tag), quantity = COALESCE(?, quantity),
@@ -104,7 +114,8 @@ router.post('/:id/allocate', authMiddleware, requireRole('admin', 'staff'), (req
     if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
 
     const issued = db.prepare("SELECT COALESCE(SUM(quantity),0) AS q FROM asset_allocations WHERE asset_id = ? AND status = 'issued'").get(asset.id).q;
-    const qty = quantity || 1;
+    const qty = quantity == null ? 1 : Math.floor(Number(quantity));
+    if (!Number.isFinite(qty) || qty < 1) return res.status(400).json({ success: false, error: 'Quantity must be a positive integer' });
     if (issued + qty > asset.quantity) {
       return res.status(400).json({ success: false, error: `Only ${asset.quantity - issued} unit(s) available` });
     }

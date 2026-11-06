@@ -2,8 +2,15 @@
 const express = require('express');
 const db = require('../db');
 const { authMiddleware, requireRole } = require('../auth');
+const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
+
+const scanLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { success: false, error: 'Too many scans in a short time. Please wait a moment.' },
+});
 
 function haversine(lat1, lon1, lat2, lon2) {
   if ([lat1, lon1, lat2, lon2].some(v => v == null)) return null;
@@ -92,7 +99,7 @@ router.get('/my-checkpoints', authMiddleware, (req, res) => {
 });
 
 // POST /api/patrol/scan - guard logs a checkpoint scan
-router.post('/scan', authMiddleware, (req, res) => {
+router.post('/scan', authMiddleware, scanLimiter, (req, res) => {
   try {
     if (req.user.role !== 'guard') return res.status(403).json({ success: false, error: 'Guards only' });
     const { checkpointId, code, lat, lng, photoUrl } = req.body;
