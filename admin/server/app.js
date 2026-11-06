@@ -7,6 +7,12 @@ const path = require('path');
 
 const app = express();
 
+// Behind Railway's (or any single) reverse proxy, trust exactly one hop so
+// express-rate-limit keys on the real client IP from X-Forwarded-For instead
+// of erroring (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR). One hop only — not `true` —
+// so clients can't spoof X-Forwarded-For to dodge rate limits.
+app.set('trust proxy', 1);
+
 // Security & parsing
 app.use(helmet());
 
