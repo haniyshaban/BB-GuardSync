@@ -55,15 +55,17 @@ router.get('/:id', authMiddleware, (req, res) => {
 // POST /api/sites - Create site
 router.post('/', authMiddleware, requireRole('admin'), (req, res) => {
   try {
-    const { name, address, contactPerson, contactPhone, shifts } = req.body;
+    const { name, address, contactPerson, contactPhone, shifts, lat, lng, geofenceRadiusM, geofenceEnabled } = req.body;
 
     if (!name) {
       return res.status(400).json({ success: false, error: 'Site name is required' });
     }
 
     const result = db.prepare(
-      'INSERT INTO sites (name, address, contact_person, contact_phone) VALUES (?, ?, ?, ?)'
-    ).run(name, address || null, contactPerson || null, contactPhone || null);
+      'INSERT INTO sites (name, address, contact_person, contact_phone, lat, lng, geofence_radius_m, geofence_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(name, address || null, contactPerson || null, contactPhone || null,
+      lat == null ? null : Number(lat), lng == null ? null : Number(lng),
+      geofenceRadiusM == null ? 150 : Number(geofenceRadiusM), geofenceEnabled ? 1 : 0);
 
     const siteId = result.lastInsertRowid;
 
@@ -87,13 +89,19 @@ router.post('/', authMiddleware, requireRole('admin'), (req, res) => {
 // PUT /api/sites/:id - Update site
 router.put('/:id', authMiddleware, requireRole('admin'), (req, res) => {
   try {
-    const { name, address, contactPerson, contactPhone } = req.body;
-    
+    const { name, address, contactPerson, contactPhone, lat, lng, geofenceRadiusM, geofenceEnabled } = req.body;
+
     db.prepare(`
       UPDATE sites SET name = COALESCE(?, name), address = COALESCE(?, address),
-      contact_person = COALESCE(?, contact_person), contact_phone = COALESCE(?, contact_phone)
+      contact_person = COALESCE(?, contact_person), contact_phone = COALESCE(?, contact_phone),
+      lat = COALESCE(?, lat), lng = COALESCE(?, lng),
+      geofence_radius_m = COALESCE(?, geofence_radius_m),
+      geofence_enabled = COALESCE(?, geofence_enabled)
       WHERE id = ?
-    `).run(name, address, contactPerson, contactPhone, req.params.id);
+    `).run(name, address, contactPerson, contactPhone,
+      lat == null ? null : Number(lat), lng == null ? null : Number(lng),
+      geofenceRadiusM == null ? null : Number(geofenceRadiusM),
+      geofenceEnabled == null ? null : (geofenceEnabled ? 1 : 0), req.params.id);
 
     res.json({ success: true, message: 'Site updated' });
   } catch (err) {

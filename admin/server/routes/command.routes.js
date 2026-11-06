@@ -28,9 +28,9 @@ function shiftActiveNow(shift, now = new Date()) {
   return s < e ? (cur >= s && cur < e) : (cur >= s || cur < e);
 }
 
-function guardLiveStatus(guardId, config) {
+function guardLiveStatus(guardId, config, site) {
   const locs = db.prepare('SELECT lat, lng, battery, timestamp FROM guard_locations WHERE guard_id = ? ORDER BY timestamp DESC LIMIT 2').all(guardId);
-  if (!locs.length) return { status: 'online', battery: null, lastPing: null, lat: null, lng: null };
+  if (!locs.length) return { status: 'online', battery: null, lastPing: null, lat: null, lng: null, offsite: false };
   const minsSince = (Date.now() - new Date(locs[0].timestamp + 'Z').getTime()) / 60000;
   let status = 'online';
   if (minsSince > (config.idle_threshold_mins || 35)) status = 'idle';
@@ -38,7 +38,17 @@ function guardLiveStatus(guardId, config) {
     const d = haversine(locs[0].lat, locs[0].lng, locs[1].lat, locs[1].lng);
     if (d != null && d < (config.idle_distance_meters || 50)) status = 'idle';
   }
-  return { status, battery: locs[0].battery, lastPing: locs[0].timestamp, lat: locs[0].lat, lng: locs[0].lng };
+
+  // Geofence: outside the site radius → off-site (takes visual precedence).
+  let offsite = false, distanceFromSite = null;
+  if (site && site.geofence_enabled && site.lat != null && locs[0].lat != null) {
+    distanceFromSite = haversine(locs[0].lat, locs[0].lng, site.lat, site.lng);
+    if (distanceFromSite != null && distanceFromSite > (site.geofence_radius_m || 150)) {
+      offsite = true;
+      status = 'off-site';
+    }
+  }
+  return { status, battery: locs[0].battery, lastPing: locs[0].timestamp, lat: locs[0].lat, lng: locs[0].lng, offsite, distanceFromSite: distanceFromSite == null ? null : Math.round(distanceFromSite) };
 }
 
 // GET /api/command/live - full live board (sites, shortages, alerts, incidents)
@@ -77,11 +87,15 @@ router.get('/live', authMiddleware, requireRole('admin', 'staff'), (req, res) =>
 
     // Live guard roster (clocked-in)
     const clockedIn = db.prepare(`
-      SELECT g.id, g.name, g.site_id, s.name AS site_name FROM guards g
-      LEFT JOIN sites s ON s.id = g.site_id
+      SELECT g.id, g.name, g.site_id, s.name AS site_name,
+             s.lat AS site_lat, s.lng AS site_lng, s.geofence_radius_m, s.geofence_enabled
+      FROM guards g LEFT JOIN sites s ON s.id = g.site_id
       WHERE g.clocked_in = 1 AND g.approval_status = 'active'
     `).all();
-    const roster = clockedIn.map(g => ({ ...g, ...guardLiveStatus(g.id, config) }));
+    const roster = clockedIn.map(g => ({
+      id: g.id, name: g.name, site_id: g.site_id, site_name: g.site_name,
+      ...guardLiveStatus(g.id, config, { lat: g.site_lat, lng: g.site_lng, geofence_radius_m: g.geofence_radius_m, geofence_enabled: g.geofence_enabled }),
+    }));
 
     // Alerts + incidents
     const activeAlerts = db.prepare("SELECT COUNT(*) AS c FROM alerts WHERE status = 'active'").get().c;
@@ -106,6 +120,7 @@ router.get('/live', authMiddleware, requireRole('admin', 'staff'), (req, res) =>
           onDuty: roster.length,
           online: roster.filter(r => r.status === 'online').length,
           idle: roster.filter(r => r.status === 'idle').length,
+          offsite: roster.filter(r => r.offsite).length,
           totalShortage,
           activeAlerts, criticalAlerts, openIncidents, openSos, lowBattery,
         },
@@ -125,19 +140,29 @@ router.get('/map', authMiddleware, requireRole('admin', 'staff'), (req, res) => 
   try {
     const config = db.prepare('SELECT * FROM system_config WHERE id = 1').get() || {};
     const clockedIn = db.prepare(`
-      SELECT g.id, g.name, g.site_id, s.name AS site_name FROM guards g
-      LEFT JOIN sites s ON s.id = g.site_id
+      SELECT g.id, g.name, g.site_id, s.name AS site_name,
+             s.lat AS site_lat, s.lng AS site_lng, s.geofence_radius_m, s.geofence_enabled
+      FROM guards g LEFT JOIN sites s ON s.id = g.site_id
       WHERE g.clocked_in = 1 AND g.approval_status = 'active'
     `).all();
 
     const guards = clockedIn
-      .map(g => ({ ...g, ...guardLiveStatus(g.id, config) }))
+      .map(g => ({
+        id: g.id, name: g.name, site_id: g.site_id, site_name: g.site_name,
+        ...guardLiveStatus(g.id, config, { lat: g.site_lat, lng: g.site_lng, geofence_radius_m: g.geofence_radius_m, geofence_enabled: g.geofence_enabled }),
+      }))
       .filter(g => g.lat != null && g.lng != null);
 
     const checkpoints = db.prepare(`
       SELECT c.id, c.label, c.code, c.lat, c.lng, c.radius_meters, c.site_id, s.name AS site_name
       FROM checkpoints c LEFT JOIN sites s ON s.id = c.site_id
       WHERE c.is_active = 1 AND c.lat IS NOT NULL AND c.lng IS NOT NULL
+    `).all();
+
+    // Geofenced sites → drawn as circles on the map.
+    const geofences = db.prepare(`
+      SELECT id, name, lat, lng, geofence_radius_m FROM sites
+      WHERE geofence_enabled = 1 AND lat IS NOT NULL AND lng IS NOT NULL
     `).all();
 
     // Open SOS incidents with coordinates (shown as urgent pins)
@@ -148,7 +173,7 @@ router.get('/map', authMiddleware, requireRole('admin', 'staff'), (req, res) => 
       ORDER BY i.created_at DESC LIMIT 50
     `).all();
 
-    res.json({ success: true, data: { generatedAt: new Date().toISOString(), guards, checkpoints, sos } });
+    res.json({ success: true, data: { generatedAt: new Date().toISOString(), guards, checkpoints, geofences, sos } });
   } catch (err) {
     console.error('Command map error:', err);
     res.status(500).json({ success: false, error: 'Failed to build map data' });

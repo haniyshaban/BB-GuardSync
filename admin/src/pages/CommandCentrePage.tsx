@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, formatTime } from '@/lib/utils';
-import { Radio, AlertTriangle, Users, Battery, ShieldAlert, Siren, RefreshCw } from 'lucide-react';
+import { Radio, AlertTriangle, Users, Battery, ShieldAlert, Siren, RefreshCw, MapPinOff } from 'lucide-react';
 
 function Tile({ icon: Icon, label, value, tone = 'default' }: any) {
   const tones: Record<string, string> = {
@@ -49,10 +49,11 @@ export default function CommandCentrePage() {
       </div>
 
       {/* Summary tiles */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         <Tile icon={Users} label="On duty" value={s.onDuty ?? '—'} tone="ok" />
         <Tile icon={Users} label="Online" value={s.online ?? '—'} />
         <Tile icon={Users} label="Idle" value={s.idle ?? '—'} tone={s.idle ? 'warn' : 'default'} />
+        <Tile icon={MapPinOff} label="Off-site" value={s.offsite ?? '—'} tone={s.offsite ? 'danger' : 'default'} />
         <Tile icon={ShieldAlert} label="Shortage" value={s.totalShortage ?? '—'} tone={s.totalShortage ? 'danger' : 'ok'} />
         <Tile icon={Siren} label="Open SOS" value={s.openSos ?? '—'} tone={s.openSos ? 'danger' : 'default'} />
         <Tile icon={AlertTriangle} label="Active alerts" value={s.activeAlerts ?? '—'} tone={s.criticalAlerts ? 'danger' : s.activeAlerts ? 'warn' : 'default'} />
@@ -132,7 +133,9 @@ export default function CommandCentrePage() {
                   <td className="px-4 py-2 font-medium text-gray-900">{g.name}</td>
                   <td className="px-4 py-2 text-gray-600">{g.site_name || '—'}</td>
                   <td className="px-4 py-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${g.status === 'online' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{g.status}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${g.offsite ? 'bg-purple-100 text-purple-800' : g.status === 'online' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+                      {g.offsite ? `off-site${g.distanceFromSite != null ? ` · ${g.distanceFromSite}m` : ''}` : g.status}
+                    </span>
                   </td>
                   <td className="px-4 py-2">{g.battery == null ? '—' : <span className={g.battery <= 15 ? 'text-red-600 font-medium' : ''}>{g.battery}%</span>}</td>
                   <td className="px-4 py-2 text-gray-500">{g.lastPing ? formatTime(g.lastPing) : '—'}</td>

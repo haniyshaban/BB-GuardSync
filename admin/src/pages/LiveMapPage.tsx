@@ -22,6 +22,7 @@ function dotIcon(color: string, pulse = false) {
 const ICONS = {
   online: dotIcon('#16a34a'),
   idle: dotIcon('#d97706'),
+  offsite: dotIcon('#9333ea', true),
   sos: dotIcon('#dc2626', true),
   checkpoint: L.divIcon({
     className: '',
@@ -57,6 +58,7 @@ export default function LiveMapPage() {
   const d = data?.data;
   const guards = d?.guards || [];
   const checkpoints = d?.checkpoints || [];
+  const geofences = d?.geofences || [];
   const sos = d?.sos || [];
 
   const allPoints: Pt[] = useMemo(() => [
@@ -70,6 +72,7 @@ export default function LiveMapPage() {
 
   const online = guards.filter((g: any) => g.status === 'online').length;
   const idle = guards.filter((g: any) => g.status === 'idle').length;
+  const offsite = guards.filter((g: any) => g.offsite).length;
 
   return (
     <div className="space-y-4">
@@ -83,6 +86,7 @@ export default function LiveMapPage() {
         <div className="flex gap-4 text-sm">
           <Legend color="#16a34a" label={`Online (${online})`} />
           <Legend color="#d97706" label={`Idle (${idle})`} />
+          <Legend color="#9333ea" label={`Off-site (${offsite})`} />
           <Legend color="#dc2626" label={`SOS (${sos.length})`} />
           <Legend color="#2563eb" label="Checkpoint" square />
         </div>
@@ -97,6 +101,13 @@ export default function LiveMapPage() {
             />
             <FitBounds points={allPoints} />
 
+            {geofences.map((gf: any) => (
+              <Circle key={`gf-${gf.id}`} center={[gf.lat, gf.lng]} radius={gf.geofence_radius_m || 150}
+                pathOptions={{ color: '#2563eb', weight: 1.5, dashArray: '6 6', fillColor: '#2563eb', fillOpacity: 0.06 }}>
+                <Popup><strong>{gf.name}</strong><br />Geofence · {gf.geofence_radius_m || 150} m radius</Popup>
+              </Circle>
+            ))}
+
             {checkpoints.map((c: any) => (
               <Marker key={`cp-${c.id}`} position={[c.lat, c.lng]} icon={ICONS.checkpoint}>
                 <Popup>
@@ -108,11 +119,12 @@ export default function LiveMapPage() {
             ))}
 
             {guards.map((g: any) => (
-              <Marker key={`g-${g.id}`} position={[g.lat, g.lng]} icon={g.status === 'idle' ? ICONS.idle : ICONS.online}>
+              <Marker key={`g-${g.id}`} position={[g.lat, g.lng]} icon={g.offsite ? ICONS.offsite : g.status === 'idle' ? ICONS.idle : ICONS.online}>
                 <Popup>
                   <strong>{g.name}</strong><br />
                   <span className="text-gray-500">{g.site_name || 'Unassigned'}</span><br />
-                  Status: {g.status}<br />
+                  Status: <strong style={{ color: g.offsite ? '#9333ea' : undefined }}>{g.offsite ? 'OFF-SITE' : g.status}</strong><br />
+                  {g.offsite && g.distanceFromSite != null && <>Distance from post: {g.distanceFromSite} m<br /></>}
                   Battery: {g.battery == null ? '—' : `${g.battery}%`}<br />
                   Last ping: {g.lastPing ? formatTime(g.lastPing) : '—'}
                 </Popup>
