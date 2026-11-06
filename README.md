@@ -80,12 +80,27 @@ cd guard-app && npm run dev                # Guard app on :5174
 cd staff-app && npm run dev                # Staff app on :5175
 ```
 
-## Removed Features (vs full GuardSync)
-- ❌ Live map / real-time guard tracking map
+## Operations Modules (Raksham-parity add-ons)
+
+| Module | Capabilities |
+|--------|-------------|
+| **24×7 Command Centre** | Live site board, shift-aware guard-shortage detection, on-duty roster, battery telemetry, active-alert panel (`/command`) |
+| **AI Sleep Alert** | Rule-based night-shift inactivity detection (no movement + no face response) → supervisor alerts, 10-min monitoring job |
+| **Patrolling & Site Visits** | Checkpoints per site, GPS-proximity-verified scans, photo/timestamp, coverage % and route history |
+| **Task & Incident Mgmt + SOS** | Assign/verify field tasks, guard incident reports, panic SOS with location, acknowledge/resolve + escalation alerts |
+| **Overtime Monitoring** | OT derived from attendance vs configurable daily/weekly thresholds, abnormal-OT flags, CSV export |
+| **Employee Management** | Statutory records (Aadhaar/PAN/EPF/Bank/PASARA) + document upload & verification, KYC status |
+| **Assets & Inventory** | Asset catalogue, guard/site allocation, issue/return/lost tracking, inventory value reports |
+| **Alerts & Notifications** | Central operational feed (sleep, shortage, SOS, low-battery, offline) surfaced in admin + staff apps |
+| **Client Visibility** | Read-only `client` role scoped to assigned sites (attendance, deployment, patrol, incidents) |
+
+Thresholds for overtime, night-shift window, sleep-alert inactivity and low-battery are configurable in **Settings**.
+
+> Note: operational alerts are delivered as an in-app feed (polled). Native push (FCM) and a live map layer are the natural next additions.
+
+## Still Not Included (vs full GuardSync)
 - ❌ Geofencing (polygon & radius)
-- ❌ Patrol mode / checkpoint scanning
+- ❌ Live map layer (Command Centre is list/table based)
+- ❌ Native push notifications (FCM) — alerts are in-app/polled
 - ❌ Conveyance requests
-- ❌ Leave management (simplified)
-- ❌ SOS alerts system
-- ❌ Field reporting
 - ❌ Voice notes / media uploads
