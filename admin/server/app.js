@@ -40,6 +40,24 @@ app.options('*', cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
 
+// Confine the read-only 'client' role to its own endpoints. A client token is
+// still a valid JWT, so without this it could read global admin/staff routes.
+const { verifyToken } = require('./auth');
+const CLIENT_ALLOWED_PREFIXES = ['/api/client', '/api/staff/login', '/api/staff/me', '/api/staff/change-password', '/api/health'];
+app.use((req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return next();
+  try {
+    const decoded = verifyToken(authHeader.split(' ')[1]);
+    if (decoded.role === 'client' && !CLIENT_ALLOWED_PREFIXES.some(p => req.path.startsWith(p))) {
+      return res.status(403).json({ success: false, error: 'Client accounts have read-only access to their assigned sites only' });
+    }
+  } catch {
+    // Invalid token — let the route's own authMiddleware produce the 401.
+  }
+  next();
+});
+
 // API Routes
 app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/org', require('./routes/org.routes'));

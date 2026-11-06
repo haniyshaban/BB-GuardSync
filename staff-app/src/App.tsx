@@ -4,6 +4,7 @@ import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
 import GuardsPage from '@/pages/GuardsPage';
 import AttendancePage from '@/pages/AttendancePage';
+import AlertsPage from '@/pages/AlertsPage';
 import Layout from '@/components/Layout';
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/guards" element={<GuardsPage />} />
         <Route path="/attendance" element={<AttendancePage />} />
+        <Route path="/alerts" element={<AlertsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

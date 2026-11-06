@@ -6,7 +6,10 @@ import DashboardPage from './pages/DashboardPage';
 import ProfilePage from './pages/ProfilePage';
 import PayslipPage from './pages/PayslipPage';
 import DeleteAccountPage from './pages/DeleteAccountPage';
+import TasksPage from './pages/TasksPage';
+import PatrolPage from './pages/PatrolPage';
 import BottomNav from './components/BottomNav';
+import SosButton from './components/SosButton';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -31,12 +34,15 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/enroll" element={<EnrollmentPage />} />
           <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+          <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
+          <Route path="/patrol" element={<ProtectedRoute><PatrolPage /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/payslip" element={<ProtectedRoute><PayslipPage /></ProtectedRoute>} />
           <Route path="/delete-account" element={<DeleteAccountPage />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </div>
+      {isAuthenticated && <SosButton />}
       {isAuthenticated && <BottomNav />}
     </div>
   );
