@@ -11,6 +11,7 @@ import AttendancePage from './pages/AttendancePage';
 import PayrollPage from './pages/PayrollPage';
 import SettingsPage from './pages/SettingsPage';
 import CommandCentrePage from './pages/CommandCentrePage';
+import LiveMapPage from './pages/LiveMapPage';
 import AlertsPage from './pages/AlertsPage';
 import OvertimePage from './pages/OvertimePage';
 import AssetsPage from './pages/AssetsPage';
@@ -36,6 +37,7 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/command" element={<CommandCentrePage />} />
+                <Route path="/map" element={<LiveMapPage />} />
                 <Route path="/guards" element={<GuardsPage />} />
                 <Route path="/guards/:id" element={<GuardDetailPage />} />
                 <Route path="/sites" element={<SitesPage />} />

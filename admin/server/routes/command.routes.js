@@ -30,7 +30,7 @@ function shiftActiveNow(shift, now = new Date()) {
 
 function guardLiveStatus(guardId, config) {
   const locs = db.prepare('SELECT lat, lng, battery, timestamp FROM guard_locations WHERE guard_id = ? ORDER BY timestamp DESC LIMIT 2').all(guardId);
-  if (!locs.length) return { status: 'online', battery: null, lastPing: null, km: null };
+  if (!locs.length) return { status: 'online', battery: null, lastPing: null, lat: null, lng: null };
   const minsSince = (Date.now() - new Date(locs[0].timestamp + 'Z').getTime()) / 60000;
   let status = 'online';
   if (minsSince > (config.idle_threshold_mins || 35)) status = 'idle';
@@ -38,7 +38,7 @@ function guardLiveStatus(guardId, config) {
     const d = haversine(locs[0].lat, locs[0].lng, locs[1].lat, locs[1].lng);
     if (d != null && d < (config.idle_distance_meters || 50)) status = 'idle';
   }
-  return { status, battery: locs[0].battery, lastPing: locs[0].timestamp };
+  return { status, battery: locs[0].battery, lastPing: locs[0].timestamp, lat: locs[0].lat, lng: locs[0].lng };
 }
 
 // GET /api/command/live - full live board (sites, shortages, alerts, incidents)
@@ -117,6 +117,41 @@ router.get('/live', authMiddleware, (req, res) => {
   } catch (err) {
     console.error('Command live error:', err);
     res.status(500).json({ success: false, error: 'Failed to build live board' });
+  }
+});
+
+// GET /api/command/map - positioned guards + checkpoints for the live map
+router.get('/map', authMiddleware, (req, res) => {
+  try {
+    const config = db.prepare('SELECT * FROM system_config WHERE id = 1').get() || {};
+    const clockedIn = db.prepare(`
+      SELECT g.id, g.name, g.site_id, s.name AS site_name FROM guards g
+      LEFT JOIN sites s ON s.id = g.site_id
+      WHERE g.clocked_in = 1 AND g.approval_status = 'active'
+    `).all();
+
+    const guards = clockedIn
+      .map(g => ({ ...g, ...guardLiveStatus(g.id, config) }))
+      .filter(g => g.lat != null && g.lng != null);
+
+    const checkpoints = db.prepare(`
+      SELECT c.id, c.label, c.code, c.lat, c.lng, c.radius_meters, c.site_id, s.name AS site_name
+      FROM checkpoints c LEFT JOIN sites s ON s.id = c.site_id
+      WHERE c.is_active = 1 AND c.lat IS NOT NULL AND c.lng IS NOT NULL
+    `).all();
+
+    // Open SOS incidents with coordinates (shown as urgent pins)
+    const sos = db.prepare(`
+      SELECT i.id, i.lat, i.lng, i.created_at, g.name AS guard_name, s.name AS site_name
+      FROM incidents i LEFT JOIN guards g ON g.id = i.guard_id LEFT JOIN sites s ON s.id = i.site_id
+      WHERE i.type = 'sos' AND i.status != 'resolved' AND i.lat IS NOT NULL
+      ORDER BY i.created_at DESC LIMIT 50
+    `).all();
+
+    res.json({ success: true, data: { generatedAt: new Date().toISOString(), guards, checkpoints, sos } });
+  } catch (err) {
+    console.error('Command map error:', err);
+    res.status(500).json({ success: false, error: 'Failed to build map data' });
   }
 });
 

@@ -3,12 +3,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   LayoutDashboard, Users, Building2, ClipboardCheck,
   DollarSign, Settings, LogOut, X, Radio, Route, ClipboardList,
-  AlertOctagon, Bell, Clock, Package, Eye,
+  AlertOctagon, Bell, Clock, Package, Eye, Map,
 } from 'lucide-react';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/command', icon: Radio, label: 'Command Centre' },
+  { to: '/map', icon: Map, label: 'Live Map' },
   { to: '/guards', icon: Users, label: 'Guards' },
   { to: '/sites', icon: Building2, label: 'Sites' },
   { to: '/attendance', icon: ClipboardCheck, label: 'Attendance' },
